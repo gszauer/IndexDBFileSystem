@@ -1,0 +1,329 @@
+<!doctype html>  
+<html lang="en">  
+    <head>  
+        <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+        <meta charset="utf-8">  
+        <title>IndexDB File System Sample</title>  
+        <meta name="description" content="WebFS Sample">  
+        <script type="text/javascript" src="IndexDBFileSystem.js"></script>
+        <script type="text/javascript">
+            // TODO: test.txt exists
+            // make a new test.txt file
+            // see if contents differ?
+            function init() {
+                const ShowTextModal = function(modalTitle, submitCallbck, cancelCallback) {
+                    const modalDiv = document.getElementById('modal');
+                    
+                    let textInput = document.getElementById('text-input');
+                    textInput.value = "";
+
+                    let submitButton = document.getElementById('text-submit');
+                    let cancelButton = document.getElementById('text-cancel');
+                    
+                    let titleText = document.getElementById('text-title');
+                    titleText.innerHTML = modalTitle;
+
+                    if (!submitButton.hasOwnProperty('UI_Callbacks')) {
+                        submitButton.UI_Callbacks = [];
+                    }
+
+                    if (!cancelButton.hasOwnProperty('UI_Callbacks')) {
+                        cancelButton.UI_Callbacks = [];
+                    }
+
+                    let OnSubmit = function() {
+                        if (submitCallbck != null) {
+                            submitCallbck(textInput.value);
+                        }
+                    }
+
+                    let OnCancel = function() {
+                        if (cancelCallback != null) {
+                            cancelCallback();
+                        }
+                    }
+
+                    submitButton.UI_Callbacks.push(OnSubmit);
+                    cancelButton.UI_Callbacks.push(OnCancel);
+
+                    submitButton.addEventListener('click', OnSubmit, false);
+                    cancelButton.addEventListener('click', OnCancel, false);
+
+                    modalDiv.style.display = "block";
+                }
+                const HideTextModal = function() {
+                    const modalDiv = document.getElementById('modal');
+                    modalDiv.style.display = "none";
+
+                    let submitButton = document.getElementById('text-submit');
+                    let cancelButton = document.getElementById('text-cancel');
+
+                    if (submitButton.hasOwnProperty('UI_Callbacks')) {
+                        while (submitButton.UI_Callbacks.length > 0) {
+                            let callback = submitButton.UI_Callbacks.pop();
+                            submitButton.removeEventListener('click', callback, false);
+                        }
+                    }
+                    submitButton.UI_Callbacks = [];
+
+                    if (cancelButton.hasOwnProperty('UI_Callbacks')) {
+                        while (cancelButton.UI_Callbacks.length > 0) {
+                            let callback = cancelButton.UI_Callbacks.pop();
+                            cancelButton.removeEventListener('click', callback, false);
+                        }
+                    }
+                    cancelButton.UI_Callbacks = [];
+                }
+
+                const UpdateFileList = function(fs) {
+                    // Clear old
+                    let leftDiv = document.getElementById('left');
+                    let contentDiv = document.getElementById('details');
+                    let leftDivWidth = getComputedStyle(leftDiv).width;
+                    if(leftDivWidth.endsWith("px")) {
+                        leftDivWidth = parseInt(leftDivWidth.slice(0, -2));
+                    }
+
+                    let child = leftDiv.lastElementChild; 
+                    while (child) {
+                        leftDiv.removeChild(child);
+                        child = leftDiv.lastElementChild;
+                    }
+
+                    fs.DepthFirstTraversal("", 
+                    function(path, depth, isDirectory, isFile) {
+                        const tabDepth = 30;
+
+                        let fileWidth = leftDivWidth;
+                        let tabWidth = depth * tabDepth;
+
+                        if (isDirectory) {
+                            fileWidth -= 30 * 3;
+                        }
+                        else if (isFile) {
+                            fileWidth -= 30;
+                        }
+                        else {
+                            console.error("Non existant file?");
+                        }
+                        fileWidth-= depth * tabDepth;
+                        if (fileWidth < tabDepth) {
+                            fileWidth = tabDepth;
+                            console.warn("name too long");
+                        }
+
+                        let div = document.createElement("div");
+
+                        let _tab = document.createElement("div");
+                        _tab.classList.add('tab');
+                        _tab.style.width = tabWidth + "px";
+                        div.appendChild(_tab);
+
+                        let _name = document.createElement("div");
+                        _name.classList.add('name');
+                        let path_arr = path.split('/').filter(function(n) { return n !== '';});
+                        if (path_arr.length == 0) {
+                            _name.innerHTML = " (root)";
+                            _tab.style.width = "5px";
+                            fileWidth -= 5;
+                        }
+                        else {
+                            _name.innerHTML = path_arr[path_arr.length - 1];
+                        }
+                        _name.style.width = fileWidth + "px";
+                        div.appendChild(_name);
+
+                        const NameClickListener = function() {
+                            fs.Read(path, 
+                            function(path, content) {
+                                let reader = new FileReader();
+                                reader.onload = function() {
+                                    contentDiv.innerHTML= reader.result;
+                                }
+                                reader.readAsText(content);
+                            },
+                            function(error) {
+                                contentDiv.innerHTML= error;
+                                console.error(error);
+                            })
+                        }
+
+                        _name.addEventListener('click', NameClickListener, false);
+                        _tab.addEventListener('click', NameClickListener, false);
+
+                        if (isDirectory) {
+                            let _file = document.createElement("div");
+                            _file.classList.add('newfile');
+                            _file.innerHTML = "[f]";
+                            div.appendChild(_file);
+                            _file.addEventListener('click', function() {
+                                ShowTextModal("Create new file",
+                                function(submitedText) {
+                                    if (submitedText.length > 0) {
+                                        let cleanPath = path;
+                                        if (cleanPath.length > 0 && !cleanPath.endsWith("/")) {
+                                            cleanPath += "/";
+                                        }
+                                        cleanPath += submitedText;
+
+                                        fs.Exists(cleanPath, 
+                                            function(path, depth, isDir, isFile) {
+                                                if (!isDir && !isDir) { // Only make file if it doesn't exist
+                                                    fs.CreateFile(cleanPath, 
+                                                        function(fileName) {
+                                                            UpdateFileList(fs);
+                                                            HideTextModal();
+                                                        },
+                                                        function(error) {
+                                                            HideTextModal();
+                                                        }
+                                                    );
+                                                }
+                                                else {
+                                                    HideTextModal();
+                                                }
+                                            },
+                                            function(error) {
+                                                HideTextModal();
+                                            }
+                                        );
+                                        
+                                    }
+                                },
+                                function() {
+                                    HideTextModal();
+                                });
+                            }, false);
+
+                            let _folder = document.createElement("div");
+                            _folder.classList.add('newfolder');
+                            _folder.innerHTML = "[d]";
+                            div.appendChild(_folder);
+                            _folder.addEventListener('click', function() {
+                                ShowTextModal("Create new folder",
+                                function(submitedText) {
+                                    if (submitedText.length > 0) {
+                                        let cleanPath = path;
+                                        if (cleanPath.length > 0 && !cleanPath.endsWith("/")) {
+                                            cleanPath += "/";
+                                        }
+                                        cleanPath += submitedText;
+
+                                        fs.Exists(cleanPath, 
+                                            function(path, depth, isDir, isFile) {
+                                                if (!isDir && !isDir) { // Only make file if it doesn't exist
+                                                    fs.CreateFolder(cleanPath, 
+                                                        function(fileName) {
+                                                            UpdateFileList(fs);
+                                                            HideTextModal();
+                                                        },
+                                                        function(error) {
+                                                            HideTextModal();
+                                                        }
+                                                    );
+                                                }
+                                                else {
+                                                    HideTextModal();
+                                                }
+                                            },
+                                            function(error) {
+                                                HideTextModal();
+                                            }
+                                        );
+                                        
+                                    }
+                                },
+                                function() {
+                                    HideTextModal();
+                                });
+                            }, false);
+
+                            div.classList.add('folder');
+                        }
+                        else {
+                            div.classList.add('file');
+                        }
+
+                        let _delete = document.createElement("div");
+                        _delete.classList.add('delete');
+                        _delete.innerHTML = "[-]";
+                        div.appendChild(_delete);
+                        _delete.addEventListener('click', function() {
+                            fs.Delete(path, function(path) {
+                                UpdateFileList(fs);
+                            },
+                            function(error) {
+                                UpdateFileList(fs);
+                            });
+                        }, false);
+
+                        leftDiv.appendChild(div);
+                    })
+                }
+
+                let fileSystem = new IndexDBFileSystem("atlas", 
+                    function(fs) { // Success
+                        console.log("File System Created");
+
+                        let test = "I can read and write files";
+                        let blob = new Blob([test], {type: 'text/plain'});
+                        
+                        fs.Write("test.txt", blob, 
+                            function(path) {
+                                fs.Read(path, 
+                                    function(path, blob) {
+                                        let reader = new FileReader();
+                                        reader.onload = function() {
+                                            console.log("Read from file: " + reader.result);
+                                        }
+                                        reader.readAsText(blob);
+                                    },
+                                    function(error) {
+                                        console.error(error);
+                                    }
+                                ); // fs.Read
+                            },
+                            function(error) {
+                                console.error(error);
+                            }
+                        ); // fs.Write   
+                        
+                        //fs.CreateFile("test.txt");
+                        //fs.CreateFile("test2.txt");
+                        //fs.CreateFolder("Hello");
+                        //fs.CreateFile("Hello/World.txt");
+
+                        UpdateFileList(fs);
+                    },
+                    function(_error) { // Error
+                        console.error("Error: " +_error);
+                    }
+                );
+            }
+        </script>
+        <link rel="stylesheet" href="style.css" />
+        <link href="data:image/x-icon;base64,AAABAAEAEBAQAAEABAAoAQAAFgAAACgAAAAQAAAAIAAAAAEABAAAAAAAgAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAvW8cAP///wCjoJ0AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEREREQAAAAAiIiIiAAAAACIiIiIAAAAAIiIiIgAAAAAiIiIiAAAAACIiIiIAAAAAAAAAAAAAAAAAAAAAAAAAAAMzMzAAAAAAAzMAMAAAAAADMwAwAAAAAAMzADAAAAAAAAAAAAAAAAAAAAAAAAD//wAAwAMAAMADAADAAwAAwAMAAMADAADAAwAAwAMAAMADAADAAwAAwAMAAMADAADABwAAwA8AAP//AAD//wAA" rel="icon" type="image/x-icon" />
+    </head>  
+    <body onload="init();">
+        <div id="modal">
+            <div id="textwindow">
+                <div id="text-title">Window Title</div>
+                <div id="text-body"><input type="text" id="text-input"></div>
+                <div id="text-footer">
+                    <input class="modal-button" type="button" id="text-submit" value="Submit">
+                    <input class="modal-button" type="button" id="text-cancel" value="Cancel">
+                </div>
+            </div>
+        </div>
+        <div id="container">
+            <div id="left">
+                <div class="file"><div class="tab"></div><a class="name">(root)</a><a class="delete">[-]</a></div>
+                <div class="folder"><div class="tab"></div><a class="name">(root)</a><a class="delete">[-]</a><a class="newfile">[f]</a><a class="newfolder">[d]</a></div>
+            </div>
+            <div id="right">
+                <div id="details">
+                </div>
+            </div>
+       </div>
+    </body>  
+</html>
