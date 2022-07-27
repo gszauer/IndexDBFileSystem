@@ -1,19 +1,25 @@
 # Index DB File System
-TODO
+
+IndexDBFileSystem.js emulates a file system using IndexDB. All files are stored as blob objects, which should make them actually be stored as files by the browser engine. This file system is intended to be used with Web Assembly to emulate a file layer.
 
 # API
-TODO
+
+IndexDBFileSystem has a mostly async API. First, you need to create an IndexDBFileSystem object. Most functions on this object don't return anything directly, instead they rely on callbacks. Function names that start with a capital letter are a part of IndexDBFileSystem's public API. Functions that start with a lower case letter are considered private API. All variables are assumed to be private.
 
 ## Constructor
 ```
 constructor(databaseName: string, onSuccess: function, onError: function)
 ```
 
+The constructor takes a database name, a success callback and an error callback. The success callback takes one argument the IndexDBFileSystem object that was just constructed. If you want to use the constructed object without waiting for the callback, it has a ```IsReady``` member, which is a boolean.
+
 ### Constructor callbacks
 ```
 onSuccess(self: IndexDBFileSystem): void
 onError(errorMessage: string): void
 ```
+
+The error callback takes a single argument, the error string and has no return.
 
 ## Write
 ```
@@ -26,6 +32,8 @@ OnSuccess(fileName: string): void
 OnError(errorMessage: string): void
 ```
 
+The error callback takes a single argument, the error string and has no return.
+
 ## Read
 ```
 Read(fileName: string, OnSuccess: function, OnError: function): void
@@ -36,6 +44,8 @@ Read(fileName: string, OnSuccess: function, OnError: function): void
 OnSuccess(filePath: string, fileContent: blob): void
 OnError(errorMessage: string) : void
 ```
+
+The error callback takes a single argument, the error string and has no return.
 
 ## Create File
 ```
@@ -48,6 +58,8 @@ OnSuccess(fileName: string): void
 OnError(errorMessage: string): void
 ```
 
+The error callback takes a single argument, the error string and has no return.
+
 ## Create Folder
 ```
 CreateFolder(path: string, OnSuccess: function, OnError: function): void
@@ -59,6 +71,8 @@ OnSuccess(path: string): void
 OnError(error: string): void
 ```
 
+The error callback takes a single argument, the error string and has no return.
+
 ## Delete File or Folder
 ```
 Delete(path: string, OnSuccess: function, OnError: function): void
@@ -69,6 +83,8 @@ Delete(path: string, OnSuccess: function, OnError: function): void
 OnSuccess(path: string): void
 OnError(error: string): void
 ```
+
+The error callback takes a single argument, the error string and has no return.
 
 ## Directory check
 ```
@@ -109,4 +125,23 @@ DepthFirstTraversal(path: string, callback: function, finished: function): void
 ```
 callback(path: string, depth: int, isDirectory: bool, isFile: bool): void
 finished(path: string): void
+```
+
+## File Watcher
+```
+Watch(path: string, OnChanged: function): WatchToken
+```
+
+```
+Unwatch(path: string): void
+Unwatch(token: Watchtoken): void
+```
+
+```
+IsWatching(path: string): bool
+```
+
+### File Watcher callback
+```
+OnChanged(path: string, isFile: bool, isFolder: bool): void
 ```
