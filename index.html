@@ -7,9 +7,7 @@
         <meta name="description" content="WebFS Sample">  
         <script type="text/javascript" src="IndexDBFileSystem.js"></script>
         <script type="text/javascript">
-            // TODO: test.txt exists
-            // make a new test.txt file
-            // see if contents differ?
+          
             function init() {
                 const ShowTextModal = function(modalTitle, submitCallbck, cancelCallback) {
                     const modalDiv = document.getElementById('modal');
@@ -75,6 +73,67 @@
                     cancelButton.UI_Callbacks = [];
                 }
 
+                const FillWithDummyData = function(fs) {
+                    let text = "Writing To And Reading From Files"
+                    let blob = new Blob([text], {type: 'text/plain'});
+                    fs.Write("test.txt", blob, 
+                            function(path) {
+                                fs.Read(path, 
+                                    function(path, blob) {
+                                        let reader = new FileReader();
+                                        reader.onload = function() {
+                                            console.log("Read from file: " + reader.result);
+                                        }
+                                        reader.readAsText(blob);
+                                    },
+                                    function(error) {
+                                        console.error(error);
+                                    }
+                                ); // fs.Read
+                                fs.CreateFolder("Foo", function(path) {
+                                    let text = "The second file.\nThat was created."
+                                    let blob = new Blob([text], {type: 'text/plain'});
+                                    fs.Write("Foo/bar.txt", blob, function(path) {
+                                        fs.CreateFolder("Hello", function(path) {
+                                            fs.CreateFolder("Hello/World", function(path) {
+                                                let text = "Hello, World"
+                                                let blob = new Blob([text], {type: 'text/plain'});
+                                                fs.Write("Hello/World/Greetings.txt", blob, function(path) {
+
+                                                    fs.CreateFolder("Foo/Bar", function(path) {
+
+                                                        let text = `Lorem ipsum, or lipsum as it is sometimes known, is dummy text used in laying out print, graphic or web designs. The passage is attributed to an unknown typesetter in the 15th century who is thought to have scrambled parts of Cicero's De Finibus Bonorum et Malorum for use in a type specimen book. It usually begins with:
+
+“Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.”
+The purpose of lorem ipsum is to create a natural looking block of text (sentence, paragraph, page, etc.) that doesn't distract from the layout. A practice not without controversy, laying out pages with meaningless filler text can be very useful when the focus is meant to be on design, not content.
+
+The passage experienced a surge in popularity during the 1960s when Letraset used it on their dry-transfer sheets, and again during the 90s as desktop publishers bundled the text with their software. Today it's seen all around the web; on templates, websites, and stock designs. Use our generator to get your own, or read on for the authoritative history of lorem ipsum.`;
+                                                        let blob = new Blob([text], {type: 'text/plain'});
+                                                        
+                                                        fs.Write("Hello/World/Lorem.txt", blob, function(path) {
+
+                                                            let text = `Lorem ipsum dolor sit amet, consectetur adipiscing elit. Proin at dui volutpat, varius tortor eget, tincidunt purus. Proin feugiat elit a ipsum bibendum, id aliquet mauris rutrum. Sed malesuada sagittis viverra. Ut vel viverra est. Nam porta neque ac pulvinar porta. Integer eu varius arcu. Maecenas sodales, quam quis mattis pulvinar, justo lorem sagittis urna, blandit mattis eros massa malesuada sapien. Integer eros tellus, dignissim non metus ac, ultricies ultrices ex.
+
+Morbi molestie quam vel mi varius laoreet. Proin ultrices at sapien eget venenatis. Suspendisse faucibus leo a tellus facilisis, at efficitur lorem euismod. Praesent erat lorem, gravida vitae ornare sed, scelerisque id eros. Morbi elementum ex in dolor dictum, ullamcorper ullamcorper mi tincidunt. Aliquam eleifend pulvinar lorem, sed egestas quam eleifend a. Quisque lacinia nisi et porttitor porta. Quisque vitae sem ac velit mattis tempor. Pellentesque lobortis scelerisque lobortis. Etiam libero augue, porta ut ultrices vel, pretium congue lorem. Vestibulum at rutrum justo, id ultrices lacus.`
+                                                            let blob = new Blob([text], {type: 'text/plain'});
+
+                                                            fs.Write("Hello/World/Ipsum.txt", blob, function(path) {
+                                                                UpdateFileList(fs);
+                                                            });
+                                                        });
+                                                    });
+                                                });
+                                            });
+                                        });
+                                    });
+                                });
+                            },
+                            function(error) {
+                                console.error(error);
+                            }
+                        ); // fs.Write 
+                }
+
                 const UpdateFileList = function(fs) {
                     // Clear old
                     let leftDiv = document.getElementById('left');
@@ -89,6 +148,23 @@
                         leftDiv.removeChild(child);
                         child = leftDiv.lastElementChild;
                     }
+
+                    let div_ = document.createElement("div");
+                    div_.classList.add("links");
+                    let ref_ = document.createElement("a");
+                    ref_.href = "https://github.com/gszauer/IndexDBFileSystem";
+                    ref_.innerHTML = "github.com/gszauer/IndexDBFileSystem";
+                    div_.appendChild(ref_);
+                    leftDiv.appendChild(div_);
+
+                    div_ = document.createElement("div");
+                    div_.classList.add("links");
+                    div_.innerHTML = "Fill With Test Data";
+                    div_.addEventListener('click', 
+                    function(event) {
+                        FillWithDummyData(fs);
+                    }, false);
+                    leftDiv.appendChild(div_);
 
                     fs.DepthFirstTraversal("", 
                     function(path, depth, isDirectory, isFile) {
@@ -148,8 +224,10 @@
                             })
                         }
 
-                        _name.addEventListener('click', NameClickListener, false);
-                        _tab.addEventListener('click', NameClickListener, false);
+                        if (!isDirectory) {
+                            _name.addEventListener('click', NameClickListener, false);
+                            _tab.addEventListener('click', NameClickListener, false);
+                        }
 
                         if (isDirectory) {
                             let _file = document.createElement("div");
@@ -270,13 +348,13 @@
 
                                 fs.Watch(path, function(changedPath, isFile, isDirectory) {
                                     if (isFile) {
-                                        console.log("File changed: " + path);
+                                        console.log("File changed: " + changedPath);
                                     }
                                     else if (isDirectory) {
-                                        console.log("Directory changed: " + path);
+                                        console.log("Directory changed: " + changedPath);
                                     }
                                     else {
-                                        console.log("Deleted: " + path);
+                                        console.log("Deleted: " + changedPath);
                                     }
                                 });
                             }
@@ -284,12 +362,6 @@
                                 _watch.innerHTML = "[w]"
                                 fs.Unwatch(path);
                             }
-                            /*fs.Delete(path, function(path) {
-                                UpdateFileList(fs);
-                            },
-                            function(error) {
-                                UpdateFileList(fs);
-                            });*/
                         }, false);
 
                         leftDiv.appendChild(div);
@@ -299,49 +371,6 @@
                 let fileSystem = new IndexDBFileSystem("atlas", 
                     function(fs) { // Success
                         console.log("File System Created");
-
-                        let text = "I can read and write files";
-                        let blob = new Blob([text], {type: 'text/plain'});
-                        
-                        fs.Write("test.txt", blob, 
-                            function(path) {
-                                fs.Read(path, 
-                                    function(path, blob) {
-                                        let reader = new FileReader();
-                                        reader.onload = function() {
-                                            console.log("Read from file: " + reader.result);
-                                        }
-                                        reader.readAsText(blob);
-                                    },
-                                    function(error) {
-                                        console.error(error);
-                                    }
-                                ); // fs.Read
-                                fs.CreateFolder("Foo", function(path) {
-                                    let text = "The second file.\nThat was created."
-                                    let blob = new Blob([text], {type: 'text/plain'});
-                                    fs.Write("Foo/bar.txt", blob, function(path) {
-                                        fs.CreateFolder("Hello", function(path) {
-                                            fs.CreateFolder("Hello/World", function(path) {
-                                                let text = "Hello, World"
-                                                let blob = new Blob([text], {type: 'text/plain'});
-                                                fs.Write("Hello/World/Greetings.txt", blob, function(path) {
-                                                    UpdateFileList(fs);
-                                                });
-                                            });
-                                        });
-                                    });
-                                });
-                            },
-                            function(error) {
-                                console.error(error);
-                            }
-                        ); // fs.Write   
-                        
-                        //fs.CreateFile("test.txt");
-                        //fs.CreateFile("test2.txt");
-                        //fs.CreateFolder("Hello");
-                        //fs.CreateFile("Hello/World.txt");
 
                         UpdateFileList(fs);
                     },
@@ -367,8 +396,10 @@
         </div>
         <div id="container">
             <div id="left">
-                <div class="file"><div class="tab"></div><a class="name">(root)</a><a class="delete">[-]</a></div>
-                <div class="folder"><div class="tab"></div><a class="name">(root)</a><a class="delete">[-]</a><a class="newfile">[f]</a><a class="newfolder">[d]</a></div>
+                <div class="links"><a href="https://github.com/gszauer/IndexDBFileSystem">github.com/gszauer/IndexDBFileSystem</a></div>
+                <div class="links">Fill With Test Data</div>
+                <!--div class="file"><div class="tab"></div><a class="name">(root)</a><a class="delete">[-]</a></div>
+                <div class="folder"><div class="tab"></div><a class="name">(root)</a><a class="delete">[-]</a><a class="newfile">[f]</a><a class="newfolder">[d]</a></div-->
             </div>
             <div id="right">
                 <div id="details">
