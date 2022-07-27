@@ -53,6 +53,7 @@ html, body {
 }
 
 .delete,
+.watch,
 .newfile,
 .newfolder {
     width: 30px;

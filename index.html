@@ -98,10 +98,10 @@
                         let tabWidth = depth * tabDepth;
 
                         if (isDirectory) {
-                            fileWidth -= 30 * 3;
+                            fileWidth -= 30 * 4;
                         }
                         else if (isFile) {
-                            fileWidth -= 30;
+                            fileWidth -= 30 * 2;
                         }
                         else {
                             console.error("Non existant file?");
@@ -257,6 +257,41 @@
                             });
                         }, false);
 
+                        let _watch = document.createElement("div");
+                        _watch.classList.add('watch');
+                        _watch.innerHTML = "[w]";
+                        if (fs.IsWatching(path)) {
+                            _watch.innerHTML = "[W]";
+                        }
+                        div.appendChild(_watch);
+                        _watch.addEventListener('click', function() {
+                            if (_watch.innerHTML == "[w]") {
+                                _watch.innerHTML = "[W]"
+
+                                fs.Watch(path, function(changedPath, isFile, isDirectory) {
+                                    if (isFile) {
+                                        console.log("File changed: " + path);
+                                    }
+                                    else if (isDirectory) {
+                                        console.log("Directory changed: " + path);
+                                    }
+                                    else {
+                                        console.log("Deleted: " + path);
+                                    }
+                                });
+                            }
+                            else {
+                                _watch.innerHTML = "[w]"
+                                fs.Unwatch(path);
+                            }
+                            /*fs.Delete(path, function(path) {
+                                UpdateFileList(fs);
+                            },
+                            function(error) {
+                                UpdateFileList(fs);
+                            });*/
+                        }, false);
+
                         leftDiv.appendChild(div);
                     })
                 }
@@ -265,8 +300,8 @@
                     function(fs) { // Success
                         console.log("File System Created");
 
-                        let test = "I can read and write files";
-                        let blob = new Blob([test], {type: 'text/plain'});
+                        let text = "I can read and write files";
+                        let blob = new Blob([text], {type: 'text/plain'});
                         
                         fs.Write("test.txt", blob, 
                             function(path) {
@@ -282,6 +317,21 @@
                                         console.error(error);
                                     }
                                 ); // fs.Read
+                                fs.CreateFolder("Foo", function(path) {
+                                    let text = "The second file.\nThat was created."
+                                    let blob = new Blob([text], {type: 'text/plain'});
+                                    fs.Write("Foo/bar.txt", blob, function(path) {
+                                        fs.CreateFolder("Hello", function(path) {
+                                            fs.CreateFolder("Hello/World", function(path) {
+                                                let text = "Hello, World"
+                                                let blob = new Blob([text], {type: 'text/plain'});
+                                                fs.Write("Hello/World/Greetings.txt", blob, function(path) {
+                                                    UpdateFileList(fs);
+                                                });
+                                            });
+                                        });
+                                    });
+                                });
                             },
                             function(error) {
                                 console.error(error);

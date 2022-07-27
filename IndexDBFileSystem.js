@@ -36,10 +36,13 @@ DepthFirstTraversal(path: string, callback: function, finished: function): void
 -> callback(path: string, depth: int, isDirectory: bool, isFile: bool): void
 -> finished(path: string): void
 
-TODO: BredthFirstTraversal();
+Watch(path: string, OnChanged: function): WatchToken
+-> OnChanged(path: string, isFile: bool, isFolder: bool): void
 
-TODO: Watch
-TODO: Unwatch
+Unwatch(path: string): void
+Unwatch(token: Watchtoken): void
+
+IsWatching(path: string): bool
 */
 
 
@@ -53,6 +56,7 @@ class IndexDBFileSystem {
         this.Database = null;
         this.Index = null;
         this.Silent = false;
+        this.FileWatch = {};
 
         let callbackIssued = false;
         const OnSuccess = function(arg) {
@@ -102,6 +106,7 @@ class IndexDBFileSystem {
                     let root = self.createMetaDataObject();
                     root.isDirectory = true;
                     root.children = [];
+                    root.path = "/";
                     let put = writeTransaction.put(root, "index",
                     function(path) {
                         self.Index = root;
@@ -118,7 +123,6 @@ class IndexDBFileSystem {
                     
                     writeTransaction.commit();
                 }
-                console.log("exists");
             }
             get.onerror = function(event) {
                 self.logError("Error accessing file index meta data");
@@ -172,6 +176,84 @@ class IndexDBFileSystem {
 
     createIndexWriteTransaction(OnSuccess, OnError) {
         return this.createTransaction("MetaData", "readwrite", OnSuccess, OnError);
+    }
+
+    triggerFolderWatchCallbacks(path, isFolder) { 
+        if (!path.startsWith("/")) {
+            path = "/" + path;
+        }
+
+        let self = this;
+
+        // Callback for folder
+        if (self.FileWatch.hasOwnProperty(path)) {
+            let watchCallbacks = self.FileWatch[path];
+            let numCallbacks = watchCallbacks.length;
+            for (let i = 0; i < numCallbacks; ++i) {
+                watchCallbacks[i](path, false, isFolder);
+            }
+        }
+
+        if (isFolder) { // Sanity check
+            if (!self.getIndexObjectFromPathString(path)) {
+                self.logError("Triggering callback for non-existant folder");
+            }
+        }
+        else { // Folder was deleted, clear all callbacks!
+            if (self.FileWatch.hasOwnProperty(path)) {
+                self.FileWatch[path] = [];
+            }
+        }
+    }
+
+    triggerFileWatchCallbacks(path, isFile) { 
+        if (!path.startsWith("/")) {
+            path = "/" + path;
+        }
+
+        let self = this;
+
+        // Callback for file
+        if (self.FileWatch.hasOwnProperty(path)) {
+            let watchCallbacks = self.FileWatch[path];
+            let numCallbacks = watchCallbacks.length;
+            for (let i = 0; i < numCallbacks; ++i) {
+                watchCallbacks[i](path, isFile, false);
+            }
+        }
+
+        const TriggerParentDirCallback = function() { // Never called
+            for (let dIter = self.getParentDirectoryFromPathString(path);
+                true; dIter = self.getParentDirectoryFromPathString(dIter)) {
+
+                if (self.FileWatch.hasOwnProperty(dIter)) {
+                    let watchCallbacks = self.FileWatch[dIter];
+                    let numCallbacks = watchCallbacks.length;
+                    for (let i = 0; i < numCallbacks; ++i) {
+                        watchCallbacks[i](dIter, false, true);
+                    }
+                }
+
+                if (dIter == "") {
+                    break;
+                }
+
+                // I decided that it only makes sense to trigger the callback for parent, not recursivley.
+                // Keeping the loop in tact in case i change my mind.
+                break;
+            }
+        }
+
+        if (isFile) { // Sanity check
+            if (!self.getIndexObjectFromPathString(path)) {
+                self.logError("Triggering callback for non-existant file");
+            }
+        }
+        else { // File was deleted, clear all callbacks!
+            if (self.FileWatch.hasOwnProperty(path)) {
+                self.FileWatch[path] = [];
+            }
+        }
     }
 
     // OnSuccess(indexDbTransaction) : void
@@ -256,10 +338,17 @@ class IndexDBFileSystem {
             parent += "/" + path_arr[i];
         }
 
+        if (!parent.startsWith("/")) {
+            parent = "/" + parent;
+        }
         return parent;
     }
 
     getIndexObjectFromPathString(path) {
+        if (!path.startsWith("/")) {
+            path = "/" + path;
+        }
+
         let path_arr = path.split('/').filter(function(n) { return n !== '';});;
         let iter = this.Index;
 
@@ -316,6 +405,10 @@ class IndexDBFileSystem {
 
     // callback(path: string, success: bool): void
     createFileMetaData(path, callback) {
+        if (!path.startsWith("/")) {
+            path = "/" + path;
+        }
+
         let self = this;
 
         let path_arr = path.split('/').filter(function(n) { return n !== '';});;
@@ -397,11 +490,25 @@ class IndexDBFileSystem {
     // OnSuccess(path: string): void
     // OnError(error: string): void
     Write(fileName, fileBlob, OnSuccess, OnError) {
+        if (!fileName.startsWith("/")) {
+            fileName = "/" + fileName;
+        }
+
         let self = this;
+        let metaDataExists = !(self.getIndexObjectFromPathString(fileName) == null);
 
         let _canceled = false;
         let writeTransaction = self.createFileWriteTransaction(
-            function(transaction) { },
+            function(transaction) {
+                if (metaDataExists) { // File existed, file watcher
+                    // This will trigger callbacks on parent directories too
+                    self.triggerFileWatchCallbacks(fileName, true);
+                }
+                else { // File just created, only update parent dir
+                    let parentName = self.getParentDirectoryFromPathString(fileName);
+                    self.triggerFolderWatchCallbacks(parentName, true);
+                }
+            },
             function(error) {
                 _canceled = true;
                 if (OnError) {
@@ -440,6 +547,10 @@ class IndexDBFileSystem {
     // OnSuccess(path: string, content: blob): void
     // OnError(error: string): void
     Read(fileName, OnSuccess, OnError) {
+        if (!fileName.startsWith("/")) {
+            fileName = "/" + fileName;
+        }
+
         let _canceled = false;
         let readTransaction = this.createFileReadTransaction(
             function(transaction) { },
@@ -471,6 +582,10 @@ class IndexDBFileSystem {
     // OnSuccess(path: string): void
     // OnError(error: string): void
     CreateFile(path, OnSuccess, OnError) {
+        if (!path.startsWith("/")) {
+            path = "/" + path;
+        }
+
         let self = this;
         let parentDir = self.getParentDirectoryFromPathString(path);
 
@@ -491,6 +606,10 @@ class IndexDBFileSystem {
     // OnSuccess(path: string): void
     // OnError(error: string): void
     CreateFolder(path, OnSuccess, OnError) {
+        if (!path.startsWith("/")) {
+            path = "/" + path;
+        }
+
         let self = this;
         let parentDir = self.getParentDirectoryFromPathString(path);
         let path_arr = path.split('/').filter(function(n) { return n !== '';});;
@@ -550,6 +669,11 @@ class IndexDBFileSystem {
 
                 self.updateIndexObject(
                     function() {
+                        // Trigger watch callback
+                        let parentPath = parentDir;
+                        self.triggerFolderWatchCallbacks(path, true);
+                        self.triggerFolderWatchCallbacks(parentPath, true);
+
                         if (OnSuccess) {
                             OnSuccess(path);
                         }
@@ -591,6 +715,18 @@ class IndexDBFileSystem {
 
                 self.updateIndexObject(
                     function() { // Success
+                        // Trigger watch callback
+                        let paths_len = paths.length;
+                        for (let j = 0; j < paths_len; ++j) {
+                            let path = paths[j];
+                            if (!path.startsWith("/")) {
+                                path = "/" + path;
+                            }
+                            self.triggerFileWatchCallbacks(path, false);
+                            let parentName = self.getParentDirectoryFromPathString(path);
+                            self.triggerFolderWatchCallbacks(parentName, true);
+                        }
+
                         if (OnSuccess) {
                             OnSuccess(paths);
                         }
@@ -609,6 +745,9 @@ class IndexDBFileSystem {
         let i_len = paths.length;
         for (let i = 0; i < paths.length; ++i) {
             let path = paths[i];
+            if (!path.startsWith("/")) {
+                path = "/" + path;
+            }
 
             writeTransaction.delete(path);
         }
@@ -617,28 +756,42 @@ class IndexDBFileSystem {
 
     // Only called from inside of Delete. path is a folder.
     deleteFolder(path, OnSuccess, OnError) {
+        if (!path.startsWith("/")) {
+            path = "/" + path;
+        }
+
         let self = this;
 
         let indexObject = self.getIndexObjectFromPathString(path);
         let remove_files = [];
+        let remove_folders = [];
 
         // Mark All recursive files to delete
-        const collectAllFiles = function(indexObject, remove_files) {
+        const collectAllFiles = function(indexObject, remove_files, remove_folders) {
             if (indexObject.isDirectory) {
                 let i_len = indexObject.children.length;
                 for (let i = 0; i < i_len; ++i) {
-                    collectAllFiles(indexObject.children[i], remove_files);
+                    collectAllFiles(indexObject.children[i], remove_files, remove_folders);
                 }
+                remove_folders.push(indexObject.path);
             }
             else {
                 remove_files.push(indexObject.path);
             }
         }
-        collectAllFiles(indexObject, remove_files);
+        collectAllFiles(indexObject, remove_files, remove_folders);
 
         const commitIndexChange = function() {
             self.updateIndexObject(
                 function() {
+                    let num_folders = remove_folders.length;
+                    for (let i = 0; i < num_folders; ++i) {
+                        let folder_path = remove_folders[i];
+                        let parent_path = self.getParentDirectoryFromPathString(folder_path);
+                        self.triggerFolderWatchCallbacks(folder_path, false);
+                        self.triggerFolderWatchCallbacks(parent_path, true);
+                    }
+                    
                     if (OnSuccess) {
                         OnSuccess(path);
                     }
@@ -691,6 +844,10 @@ class IndexDBFileSystem {
     }
 
     Delete(path, OnSuccess, OnError) {
+        if (!path.startsWith("/")) {
+            path = "/" + path;
+        }
+        
         let self = this;
 
         self.Exists(path, function(path, isDirectory, isFile) {
@@ -715,7 +872,11 @@ class IndexDBFileSystem {
 
     // callback(path: string, isDirectory: bool): void
     IsDirectory(path, callback) {
-        if (path == "") {
+        if (!path.startsWith("/")) {
+            path = "/" + path;
+        }
+
+        if (path == "" || path == "/") {
             if (callback) {
                 callback(path, true);
             }
@@ -731,6 +892,10 @@ class IndexDBFileSystem {
 
     // callback(path: string, isFile: bool): void
     IsFile(path, callback) {
+        if (!path.startsWith("/")) {
+            path = "/" + path;
+        }
+
         this.Exists(path, function(_path, isDirectory, isFile) {
             if (callback) {
                 callback(path, isFile);
@@ -740,6 +905,10 @@ class IndexDBFileSystem {
 
     // callback(path: string, isDirectory: bool, isFile: bool): void
     Exists(path, callback) {
+        if (!path.startsWith("/")) {
+            path = "/" + path;
+        }
+
         let path_arr = path.split('/').filter(function(n) { return n !== '';});;
         let iter = this.Index;
 
@@ -768,6 +937,10 @@ class IndexDBFileSystem {
     }
 
     DepthFirstTraversal(path, callback, finished) {
+        if (!path.startsWith("/")) {
+            path = "/" + path;
+        }
+
         let self = this;
         const recursiveTraversal = function(indexObject, depth, isDirectory, isFile) {
             if (callback) {
@@ -792,12 +965,66 @@ class IndexDBFileSystem {
         }
     }
 
-    // OnChanged(path: string, isFile: bool): watchToken
+    // OnChanged(path: string, isFile: bool, isFolder: bool): watchToken
     Watch(path, OnChanged) {
-        // TODO: so far only read / write change a file. Touch uses Write
+        if (!path.startsWith("/")) {
+            path = "/" + path;
+        }
+        // Make sure list exists
+        if (!this.FileWatch.hasOwnProperty(path)) {
+            this.FileWatch[path] = [];
+        }
+
+        let i_size = this.FileWatch[path].length;
+        for (let i = 0; i < i_size; ++i) {
+            if (this.FileWatch[path][i] == OnChanged) {
+                this.logError("Adding duplicate on change handler to: " + path);
+            }
+        }
+
+        this.FileWatch[path].push(OnChanged);
+
+        let watchToken = {}
+        watchToken.path = path;
+        watchToken.callback = OnChanged;
+        return watchToken;
     }
 
     Unwatch(watchReturnToken) {
-        // TODO
+        if (typeof watchReturnToken === "string") {
+            if (!watchReturnToken.startsWith("/")) {
+                watchReturnToken = "/" + watchReturnToken;
+            }
+            if (this.FileWatch.hasOwnProperty(watchReturnToken)) {
+                this.FileWatch[watchReturnToken] = [];
+            }
+        }
+        else {
+            let path = watchReturnToken.path;
+            let OnChanged = watchReturnToken.callback;
+
+            if (this.FileWatch.hasOwnProperty(path)) {
+                let i_size = this.FileWatch[path].length;
+                let to_remove = -1;
+                for (let i = 0; i < i_size; ++i) {
+                    if (this.FileWatch[path][i] == OnChanged) {
+                        to_remove = i;
+                        break;
+                    }
+                }
+
+                if (to_remove == -1) {
+                    this.logError("Removing non existant watcher from: " + path);
+                }
+                this.FileWatch[path].splice(to_remove, 1);
+            }
+        }
+    }
+
+    IsWatching(path) {
+        if (this.FileWatch.hasOwnProperty(path)) {
+            return this.FileWatch[path].length > 0;
+        }
+        return false;
     }
 }
