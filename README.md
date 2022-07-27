@@ -1,6 +1,6 @@
 # Index DB File System
 
-IndexDBFileSystem.js emulates a file system using IndexDB. All files are stored as blob objects, which should make them actually be stored as files by the browser engine. This file system is intended to be used with Web Assembly to emulate a file layer.
+IndexDBFileSystem.js emulates a case insensitive file system using IndexDB. All files are stored as blob objects, which should make them actually be stored as files by the browser engine. This file system is intended to be used with Web Assembly to emulate a file layer. There isn't a maximum disk space to querry for, and some browser engines automatically clear their IndexDB Databases automatically (every 14 days). It's best to think of this library as semi-permanent storage, like a cache. WPA apps can request that their databses be permanent.
 
 # API
 

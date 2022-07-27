@@ -107,6 +107,7 @@ class IndexDBFileSystem {
                     root.isDirectory = true;
                     root.children = [];
                     root.path = "/";
+                    root.prettyPath = "/";
                     let put = writeTransaction.put(root, "index",
                     function(path) {
                         self.Index = root;
@@ -179,6 +180,7 @@ class IndexDBFileSystem {
     }
 
     triggerFolderWatchCallbacks(path, isFolder) { 
+        path = path.toLowerCase();
         if (!path.startsWith("/")) {
             path = "/" + path;
         }
@@ -194,12 +196,7 @@ class IndexDBFileSystem {
             }
         }
 
-        if (isFolder) { // Sanity check
-            if (!self.getIndexObjectFromPathString(path)) {
-                self.logError("Triggering callback for non-existant folder");
-            }
-        }
-        else { // Folder was deleted, clear all callbacks!
+        if (!isFolder) { // Folder was deleted, clear all callbacks!
             if (self.FileWatch.hasOwnProperty(path)) {
                 self.FileWatch[path] = [];
             }
@@ -207,6 +204,7 @@ class IndexDBFileSystem {
     }
 
     triggerFileWatchCallbacks(path, isFile) { 
+        path = path.toLowerCase();
         if (!path.startsWith("/")) {
             path = "/" + path;
         }
@@ -244,12 +242,7 @@ class IndexDBFileSystem {
             }
         }
 
-        if (isFile) { // Sanity check
-            if (!self.getIndexObjectFromPathString(path)) {
-                self.logError("Triggering callback for non-existant file");
-            }
-        }
-        else { // File was deleted, clear all callbacks!
+        if (!isFile) { // File was deleted, clear all callbacks!
             if (self.FileWatch.hasOwnProperty(path)) {
                 self.FileWatch[path] = [];
             }
@@ -321,6 +314,7 @@ class IndexDBFileSystem {
 
         result.name = "";
         result.path = "";
+        result.prettyPath = "";
         result.isFile = false;
         result.isDirectory = false;
         result.children = null;
@@ -330,6 +324,11 @@ class IndexDBFileSystem {
     }
 
     getParentDirectoryFromPathString(path) {
+        path = path.toLowerCase();
+        if (!path.startsWith("/")) {
+            path = "/" + path;
+        }
+
         let path_arr = path.split('/').filter(function(n) { return n !== '';});
         let parent = "";
 
@@ -345,6 +344,7 @@ class IndexDBFileSystem {
     }
 
     getIndexObjectFromPathString(path) {
+        path = path.toLowerCase();
         if (!path.startsWith("/")) {
             path = "/" + path;
         }
@@ -403,15 +403,17 @@ class IndexDBFileSystem {
         writeTransaction.commit();
     }
 
-    // callback(path: string, success: bool): void
     createFileMetaData(path, callback) {
         if (!path.startsWith("/")) {
             path = "/" + path;
         }
+        let original_case = path;
+        path = path.toLowerCase();
 
         let self = this;
 
-        let path_arr = path.split('/').filter(function(n) { return n !== '';});;
+        let path_arr = path.split('/').filter(function(n) { return n !== '';});
+        let original_arr = original_case.split('/').filter(function(n) { return n !== '';});
         let iter = self.Index;
 
         let i_len = path_arr.length - 1;
@@ -429,8 +431,10 @@ class IndexDBFileSystem {
 
             if (!found) { // Need to create directory
                 let this_path = "";
+                let pretty_path = "";
                 for (let k = 0; k < i; ++k) {
                     this_path += "/" + path_arr[k];
+                    pretty_path += "/" + original_arr[k];
                 }
 
                 let new_dir = self.createMetaDataObject();
@@ -439,6 +443,7 @@ class IndexDBFileSystem {
                 new_dir.children = [];
                 new_dir.isDirectory = true;
                 new_dir.path = this_path;
+                new_dir.prettyPath = pretty_path;
                 new_dir.name = path_arr[i];
 
                 iter = new_dir;
@@ -461,6 +466,7 @@ class IndexDBFileSystem {
             let new_file = self.createMetaDataObject();
             new_file.isFile = true;
             new_file.path = path;
+            new_file.prettyPath = original_case;
             new_file.name = path_arr[i_len];
             new_file.parent = iter;
             iter.children.push(new_file);
@@ -487,12 +493,12 @@ class IndexDBFileSystem {
         );
     }
 
-    // OnSuccess(path: string): void
-    // OnError(error: string): void
     Write(fileName, fileBlob, OnSuccess, OnError) {
         if (!fileName.startsWith("/")) {
             fileName = "/" + fileName;
         }
+        let originalCase = fileName;
+        fileName = fileName.toLowerCase();
 
         let self = this;
         let metaDataExists = !(self.getIndexObjectFromPathString(fileName) == null);
@@ -519,10 +525,10 @@ class IndexDBFileSystem {
 
         let request = writeTransaction.put(fileBlob, fileName,
             function(path) {
-                self.createFileMetaData(fileName, function(path, metaDataExists) {
+                self.createFileMetaData(originalCase, function(path, metaDataExists) {
                     if (metaDataExists) {
                         if (OnSuccess && !_canceled) {
-                            OnSuccess(fileName);
+                            OnSuccess(originalCase);
                         }
                     }
                     else {
@@ -544,12 +550,12 @@ class IndexDBFileSystem {
         writeTransaction.commit();
     }
 
-    // OnSuccess(path: string, content: blob): void
-    // OnError(error: string): void
     Read(fileName, OnSuccess, OnError) {
         if (!fileName.startsWith("/")) {
             fileName = "/" + fileName;
         }
+        let originalCase = fileName;
+        fileName = fileName.toLowerCase();
 
         let _canceled = false;
         let readTransaction = this.createFileReadTransaction(
@@ -566,7 +572,7 @@ class IndexDBFileSystem {
         request.onsuccess = function (event) {
             let file = event.target.result;
             if (OnSuccess && !_canceled) {
-                OnSuccess(fileName, file);
+                OnSuccess(originalCase, file);
             }
         };
         request.onerror = function(event) {
@@ -579,12 +585,12 @@ class IndexDBFileSystem {
         readTransaction.commit();
     }
 
-    // OnSuccess(path: string): void
-    // OnError(error: string): void
     CreateFile(path, OnSuccess, OnError) {
         if (!path.startsWith("/")) {
             path = "/" + path;
         }
+        let originalCase = path;
+        path = path.toLowerCase();
 
         let self = this;
         let parentDir = self.getParentDirectoryFromPathString(path);
@@ -592,7 +598,7 @@ class IndexDBFileSystem {
         self.IsDirectory(parentDir, function(dir, isDirectory) {
             if (isDirectory) {
                 const emptyBlob = new Blob([""], {type: 'text/plain'});
-                self.Write(path, emptyBlob, OnSuccess, OnError);
+                self.Write(originalCase, emptyBlob, OnSuccess, OnError);
             }
             else {
                 self.logError("Can't touch file (" + path + "), parent directory (" + dir + ") doesn't exit");
@@ -609,6 +615,9 @@ class IndexDBFileSystem {
         if (!path.startsWith("/")) {
             path = "/" + path;
         }
+        let originalCase = path;
+        path = path.toLowerCase();
+
 
         let self = this;
         let parentDir = self.getParentDirectoryFromPathString(path);
@@ -653,7 +662,7 @@ class IndexDBFileSystem {
                     }
                     else {
                         if (OnSuccess) {
-                            OnSuccess(path);
+                            OnSuccess(originalCase);
                         }
                     }
                     return;
@@ -663,6 +672,7 @@ class IndexDBFileSystem {
                 new_folder.isDirectory = true;
                 new_folder.children = [];
                 new_folder.path = path;
+                new_folder.prettyPath = originalCase;
                 new_folder.name = path_arr[i_len];
                 new_folder.parent = iter;
                 iter.children.push(new_folder);
@@ -718,12 +728,8 @@ class IndexDBFileSystem {
                         // Trigger watch callback
                         let paths_len = paths.length;
                         for (let j = 0; j < paths_len; ++j) {
-                            let path = paths[j];
-                            if (!path.startsWith("/")) {
-                                path = "/" + path;
-                            }
-                            self.triggerFileWatchCallbacks(path, false);
-                            let parentName = self.getParentDirectoryFromPathString(path);
+                            self.triggerFileWatchCallbacks(paths[j], false);
+                            let parentName = self.getParentDirectoryFromPathString(paths[j]);
                             self.triggerFolderWatchCallbacks(parentName, true);
                         }
 
@@ -759,6 +765,8 @@ class IndexDBFileSystem {
         if (!path.startsWith("/")) {
             path = "/" + path;
         }
+        let originalCase = path;
+        path = path.toLowerCase();
 
         let self = this;
 
@@ -781,6 +789,23 @@ class IndexDBFileSystem {
         }
         collectAllFiles(indexObject, remove_files, remove_folders);
 
+        remove_folders.sort(function(a, b) {
+            let x_arr = a.split('/').filter(function(n) { return n !== '';});;
+            let y_arr = b.split('/').filter(function(n) { return n !== '';});;
+
+            let x = x_arr.length;
+            let y = y_arr.length;
+
+            // We want to order in reverse
+            if (x < y) {
+              return 1; // Normally -1
+            }
+            if (x > y) {
+              return -1; // Normally 1
+            }
+            return 0;
+          });
+
         const commitIndexChange = function() {
             self.updateIndexObject(
                 function() {
@@ -793,7 +818,7 @@ class IndexDBFileSystem {
                     }
                     
                     if (OnSuccess) {
-                        OnSuccess(path);
+                        OnSuccess(originalCase);
                     }
                 },
                 function() {
@@ -847,6 +872,8 @@ class IndexDBFileSystem {
         if (!path.startsWith("/")) {
             path = "/" + path;
         }
+        let originalCase = path;
+        path = path.toLowerCase();
         
         let self = this;
 
@@ -858,14 +885,14 @@ class IndexDBFileSystem {
                 }
             }
             else if (isFile) {
-                self.deleteFiles([path], function(paths) {
+                self.deleteFiles([originalCase], function(paths) {
                     if (OnSuccess) {
                         OnSuccess(paths[0]);
                     }
                 }, OnError);
             }
             else {
-                self.deleteFolder(path, OnSuccess, OnError);
+                self.deleteFolder(originalCase, OnSuccess, OnError);
             }
         });
     }
@@ -875,6 +902,8 @@ class IndexDBFileSystem {
         if (!path.startsWith("/")) {
             path = "/" + path;
         }
+        let originalCase = path;
+        path = path.toLowerCase();
 
         if (path == "" || path == "/") {
             if (callback) {
@@ -884,7 +913,7 @@ class IndexDBFileSystem {
         else {
             this.Exists(path, function(_path, isDirectory, isFile) {
                 if (callback) {
-                    callback(path, isDirectory);
+                    callback(originalCase, isDirectory);
                 }
             });
         }
@@ -895,10 +924,12 @@ class IndexDBFileSystem {
         if (!path.startsWith("/")) {
             path = "/" + path;
         }
+        let originalCase = path;
+        path = path.toLowerCase();
 
         this.Exists(path, function(_path, isDirectory, isFile) {
             if (callback) {
-                callback(path, isFile);
+                callback(originalCase, isFile);
             }
         });
     }
@@ -908,6 +939,8 @@ class IndexDBFileSystem {
         if (!path.startsWith("/")) {
             path = "/" + path;
         }
+        let originalCase = path;
+        path = path.toLowerCase();
 
         let path_arr = path.split('/').filter(function(n) { return n !== '';});;
         let iter = this.Index;
@@ -925,18 +958,19 @@ class IndexDBFileSystem {
             }
             if (!found) {
                 if (callback) {
-                    callback(path, false, false);
+                    callback(originalCase, false, false);
                     return;
                 }
             }
         }
 
         if (callback) {
-            callback(path, iter.isDirectory, iter.isFile);
+            callback(originalCase, iter.isDirectory, iter.isFile);
         }
     }
 
     DepthFirstTraversal(path, callback, finished) {
+        path = path.toLowerCase();
         if (!path.startsWith("/")) {
             path = "/" + path;
         }
@@ -944,7 +978,7 @@ class IndexDBFileSystem {
         let self = this;
         const recursiveTraversal = function(indexObject, depth, isDirectory, isFile) {
             if (callback) {
-                callback(indexObject.path, depth, isDirectory, isFile);
+                callback(indexObject.prettyPath, depth, isDirectory, isFile);
             }
 
             if (indexObject.isDirectory) {
@@ -967,6 +1001,7 @@ class IndexDBFileSystem {
 
     // OnChanged(path: string, isFile: bool, isFolder: bool): watchToken
     Watch(path, OnChanged) {
+        path = path.toLowerCase();
         if (!path.startsWith("/")) {
             path = "/" + path;
         }
@@ -992,6 +1027,7 @@ class IndexDBFileSystem {
 
     Unwatch(watchReturnToken) {
         if (typeof watchReturnToken === "string") {
+            watchReturnToken = watchReturnToken.toLowerCase();
             if (!watchReturnToken.startsWith("/")) {
                 watchReturnToken = "/" + watchReturnToken;
             }
@@ -1022,6 +1058,10 @@ class IndexDBFileSystem {
     }
 
     IsWatching(path) {
+        path = path.toLowerCase();
+        if (!path.startsWith("/")) {
+            path = "/" + path;
+        }
         if (this.FileWatch.hasOwnProperty(path)) {
             return this.FileWatch[path].length > 0;
         }

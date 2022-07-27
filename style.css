@@ -40,10 +40,21 @@ html, body {
     background-color: rgb(50, 50, 50);
 }
 
-.file,
-.folder {
+.links {
+    background-color: rgb(30, 30, 30);;
+}
+
+.folder,
+.links {
     height: 25px;
     overflow: hidden;
+}
+
+.file,
+.links {
+    height: 25px;
+    overflow: hidden;
+    cursor: pointer;
 }
 
 .name {
@@ -60,6 +71,7 @@ html, body {
     display: block;
     float: left;
     height: 25px;
+    cursor: pointer;
 }
 
 .tab {
