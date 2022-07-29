@@ -1,8 +1,22 @@
 #include "IndexDBFileSystem.h"
 
+// Helper functions
+int IndexDBFileSystem_strlen(const char* str) {
+    if (str == 0) {
+        return 0;
+    }
+
+    const char *s = str;
+    while (*s) {
+        ++s;
+    }
+    return (s - str);
+}
+
 // Wasm imports
 extern "C" void IndexDBFileSystem_wasmWrite(const char* str_ptr, int str_len, const void* blob_ptr, int blob_size, IndexDBFileSystem::fpWriteCallback success_callback, IndexDBFileSystem::fpErrorCallback error_callback);
-extern "C" void IndexDBFileSystem_wasmLog(const char msg, int msgLen);
+extern "C" void IndexDBFileSystem_wasmLog(const char* msg, int msgLen);
+extern unsigned char __heap_base;
 
 // Wasm exports
 #define export __attribute__ (( visibility( "default" ) )) extern "C"
@@ -19,17 +33,34 @@ export void IndexDBFileSystem_wasmTriggerWriteCallback(IndexDBFileSystem::fpWrit
     }
 }
 
-export void IndexDBFileSystem_wasmInitializeFileSystem(IndexDBFileSystem* fs, char* error, u32 errorSize) {
-    InitializeFileSystem(fs, error, errorSize);
+export int IndexDBFileSystem_wasmSizeOfFileSystemStruct() {
+    return sizeof(IndexDBFileSystem);
 }
 
-// Helper functions
-int IndexDBFileSystem_strlen(const char* str) {
-    const char *s = str;
-    while (*s) {
-        ++s;
-    }
-    return (s - str);
+export void IndexDBFileSystem_wasmInitializeFileSystem(IndexDBFileSystem* fs) {
+    InitializeFileSystem(fs);
+}
+
+void IndexDBFileSystem_Write(const char* fileName, const void* fileContent, u32 contentSize, IndexDBFileSystem::fpWriteCallback onSuccess, IndexDBFileSystem::fpErrorCallback onError);
+
+export void IndexDBFileSystem_wasmTestFileSystem() {
+    const char* content = "File created in C++";
+    IndexDBFileSystem_Write("Cpp.text", content, IndexDBFileSystem_strlen(content), 
+        [](const char* fileName, u32 bytesWritten) {
+            const char* msg = "Successfully wrote Cpp.text";
+            int len = IndexDBFileSystem_strlen(msg);
+            IndexDBFileSystem_wasmLog(msg, len);
+        },
+        [](const char* erro) {
+            int len = IndexDBFileSystem_strlen(erro);
+            IndexDBFileSystem_wasmLog(erro, len);
+        }
+    );
+}
+
+export void* IndexDBFileSystem_wasmGetHeapPtr() {
+    void* memory = &__heap_base;
+    return memory;
 }
 
 // File System API
@@ -119,12 +150,3 @@ void ShutdownFileSystem(IndexDBFileSystem* fs) {
     fs->UnwatchAll = 0;
     fs->IsWatching = 0;
 }
-
-// TODO: Disable. Using this to test if interop is working
-#if 1
-export void IndexDBFileSystem_wasmTestFileSystem() {
-    const char* msg = "C++ IndexDBFileSystem_wasmTestFileSystem calling js IndexDBFileSystem_wasmLog";
-    int len = IndexDBFileSystem_strlen(msg);
-    IndexDBFileSystem_wasmLog(msg, len)
-}
-#endif

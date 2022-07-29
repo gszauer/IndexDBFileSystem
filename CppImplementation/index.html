@@ -5,15 +5,46 @@
         <meta charset="utf-8">  
         <title>IndexDB File System C++ Wasm Sample</title>  
         <meta name="description" content="WebFS Sample">  
-        <script type="text/javascript" src="IndexDBFileSystem.js"></script>
+        <script type="text/javascript" src="../IndexDBFileSystem.js"></script>
         <script type="text/javascript">
           
             function init() {
                 let fileSystem = new IndexDBFileSystem("atlas", 
                     function(fs) { // Success
                         console.log("File System Created");
-                        // TODO: Load and init web assembly
-                        // TODO: Last step is to call IndexDBFileSystem_wasmTestFileSystem
+
+                        let requestedMemoryMb = 8;
+                        
+                        let wasmNumPages = Math.ceil((requestedMemoryMb * 1024 * 1024) / (64 * 1024)); // Wasm page = 64 KiB
+                        let programMemory = new WebAssembly.Memory({ initial: wasmNumPages, maximum: wasmNumPages });
+                        
+                        let importObject = {
+                            module: {},
+                            env: {
+                                memory: programMemory
+                            }
+                        };
+
+                        fs.InjectWebAssemblyImportObject(importObject);
+
+                        WebAssembly.instantiateStreaming(fetch('IndexDBFileSystem.wasm'), importObject).then(prog => {
+                            let heap_base = prog.instance.exports.IndexDBFileSystem_wasmGetHeapPtr();
+                            let BumpAlloc = function(bytes) { // Quick and dirty bump allocator
+                                let result = heap_base;
+                                heap_base += bytes;
+                                return result;
+                            }
+                            
+                            let fsObjectSize = prog.instance.exports.IndexDBFileSystem_wasmSizeOfFileSystemStruct();
+                            let fsObjectPtr = BumpAlloc(fsObjectSize);
+                            let errorStringSize = 1024;
+                            let errorStringPtr = BumpAlloc(errorStringSize);
+
+                            fs.InitializeWebAssembly(programMemory, prog.instance.exports, fsObjectPtr, errorStringPtr, errorStringSize);
+
+                            // File system is set up and ready
+                            prog.instance.exports.IndexDBFileSystem_wasmTestFileSystem();
+                        });
                     },
                     function(_error) { // Error
                         console.error("Error creating file system: " +_error);
@@ -42,7 +73,6 @@
                 color: rgb(220, 220, 220);
             }
         </style>
-        <link rel="stylesheet" href="style.css" />
         <link href="data:image/x-icon;base64,AAABAAEAEBAQAAEABAAoAQAAFgAAACgAAAAQAAAAIAAAAAEABAAAAAAAgAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAvW8cAP///wCjoJ0AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEREREQAAAAAiIiIiAAAAACIiIiIAAAAAIiIiIgAAAAAiIiIiAAAAACIiIiIAAAAAAAAAAAAAAAAAAAAAAAAAAAMzMzAAAAAAAzMAMAAAAAADMwAwAAAAAAMzADAAAAAAAAAAAAAAAAAAAAAAAAD//wAAwAMAAMADAADAAwAAwAMAAMADAADAAwAAwAMAAMADAADAAwAAwAMAAMADAADABwAAwA8AAP//AAD//wAA" rel="icon" type="image/x-icon" />
     </head>  
     <body onload="init();">

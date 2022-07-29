@@ -19,4 +19,4 @@ C:/WASM/clang.exe -x c++ ^
     -o IndexDBFileSystem.wasm ^
     IndexDBFileSystem-wasm.cpp
 
-COPY /Y "..\IndexDBFileSystem.js" "IndexDBFileSystem.js"
+REM; COPY /Y "..\IndexDBFileSystem.js" "IndexDBFileSystem.js"
