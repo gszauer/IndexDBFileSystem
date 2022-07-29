@@ -4,37 +4,44 @@ IndexDBFileSystem.js emulates a case insensitive file system using IndexDB. All 
 
 # API
 
-IndexDBFileSystem has a mostly async API. First, you need to create an IndexDBFileSystem object. Most functions on this object don't return anything directly, instead they rely on callbacks. Function names that start with a capital letter are a part of IndexDBFileSystem's public API. Functions that start with a lower case letter are considered private API. All variables are assumed to be private.
+IndexDBFileSystem has a mostly async API. First, you need to create an IndexDBFileSystem object. Most functions on this object don't return anything directly, instead they rely on callbacks. Function names that start with a capital letter are a part of IndexDBFileSystem's public API. Functions that start with a lower case letter are considered private API. All variables are assumed to be private. IndexDBFileSystem has C++ bindings that allow it to be used with web-assembly. The C++ API closeley resembles the javascript API.
 
 ## Constructor
+
 ```
 constructor(databaseName: string, onSuccess: function, onError: function)
 ```
 
-The constructor takes a database name, a success callback and an error callback. The success callback takes one argument the IndexDBFileSystem object that was just constructed. If you want to use the constructed object without waiting for the callback, it has a ```IsReady``` member, which is a boolean.
+The constructor takes a database name, a success callback and an error callback. The success callback takes one argument the IndexDBFileSystem object that was just constructed. If you want to use the constructed object without waiting for the callback, it has a ```IsReady``` member, which is a boolean. The file system can be used inside a web assembly module, it includes seperate injection and initialization code for web assembly.
 
 ### Constructor callbacks
+
 ```
 onSuccess(self: IndexDBFileSystem): void
 onError(errorMessage: string): void
 ```
 
-The error callback takes a single argument, the error string and has no return.
+The error callback takes a single argument, the error string and has no return. The success callback is a reference to the ```IndexDBFileSystem``` object that was just created.
 
 ## Write
+
 ```
 Write(fileName: string, fileContent: blob, OnSuccess: function, OnError: function): void
 ```
 
+Writes some bytes of data to disk. The write function takes a file name, a blob for the file content, and callbacks for success and failure. If the file being written does not exist, it will be created. If the file being written already exists, it's content will be replaced. There is no append function, but it can be implemented with read and write. If the file path is in a directory which does not exist, that directory will be created.
+
 ### Write callbacks
+
 ```
-OnSuccess(fileName: string): void
+OnSuccess(fileName: string, bytesWritten: int): void
 OnError(errorMessage: string): void
 ```
 
-The error callback takes a single argument, the error string and has no return.
+The error callback takes a single argument, the error string and has no return. The success callback takes the path of the file that was written, and the number of bytes that where written. 
 
 ## Read
+
 ```
 Read(fileName: string, OnSuccess: function, OnError: function): void
 ```
@@ -48,6 +55,7 @@ OnError(errorMessage: string) : void
 The error callback takes a single argument, the error string and has no return.
 
 ## Create File
+
 ```
 CreateFile(path: string, OnSuccess: function, OnError: function): void
 ```
@@ -145,3 +153,7 @@ IsWatching(path: string): bool
 ```
 OnChanged(path: string, isFile: bool, isFolder: bool): void
 ```
+
+## C++ API
+
+TODO
