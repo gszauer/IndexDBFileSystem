@@ -1,0 +1,50 @@
+<!doctype html>  
+<html lang="en">  
+    <head>  
+        <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+        <meta charset="utf-8">  
+        <title>IndexDB File System C++ Wasm Sample</title>  
+        <meta name="description" content="WebFS Sample">  
+        <script type="text/javascript" src="IndexDBFileSystem.js"></script>
+        <script type="text/javascript">
+          
+            function init() {
+                let fileSystem = new IndexDBFileSystem("atlas", 
+                    function(fs) { // Success
+                        console.log("File System Created");
+                        // TODO: Load and init web assembly
+                        // TODO: Last step is to call IndexDBFileSystem_wasmTestFileSystem
+                    },
+                    function(_error) { // Error
+                        console.error("Error creating file system: " +_error);
+                    }
+                );
+            }
+        </script>
+        <style>
+            * {
+                border: 0px;
+                padding: 0px;
+                margin: 0px;
+                color: rgb(220, 220, 220);
+                text-decoration: none;
+                font-size: 14px;
+                font-family: monospace;
+            }
+
+            html, body {
+                min-height: 100% !important;
+                min-width: 100% !important;
+                height: 100%;
+                width: 100%;
+
+                background-color: rgb(0, 0, 0);
+                color: rgb(220, 220, 220);
+            }
+        </style>
+        <link rel="stylesheet" href="style.css" />
+        <link href="data:image/x-icon;base64,AAABAAEAEBAQAAEABAAoAQAAFgAAACgAAAAQAAAAIAAAAAEABAAAAAAAgAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAvW8cAP///wCjoJ0AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEREREQAAAAAiIiIiAAAAACIiIiIAAAAAIiIiIgAAAAAiIiIiAAAAACIiIiIAAAAAAAAAAAAAAAAAAAAAAAAAAAMzMzAAAAAAAzMAMAAAAAADMwAwAAAAAAMzADAAAAAAAAAAAAAAAAAAAAAAAAD//wAAwAMAAMADAADAAwAAwAMAAMADAADAAwAAwAMAAMADAADAAwAAwAMAAMADAADABwAAwA8AAP//AAD//wAA" rel="icon" type="image/x-icon" />
+    </head>  
+    <body onload="init();">
+    </body>  
+</html>

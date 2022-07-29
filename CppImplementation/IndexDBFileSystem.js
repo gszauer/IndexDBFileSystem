@@ -61,8 +61,6 @@ class IndexDBFileSystem {
         this.WasmFsPointer = null;
         this.WasmFsExports = null;
         this.WasmFsMemory = null;
-        this.WasmFsErrorBuffer = null;
-        this.WasmFsErrorBufferSize = null;
 
         let callbackIssued = false;
         const OnSuccess = function(arg) {
@@ -1089,49 +1087,24 @@ class IndexDBFileSystem {
                     self.WasmFsExports.IndexDBFileSystem_wasmTriggerWriteCallback(success_callback, name_ptr, bytesWritten);
                 },
                 function(errorMessage) {
-                    let error_ptr = self.WasmFsErrorBuffer;
-                    
-                    if (errorMessage && errorMessage != 0 && error_ptr != 0) {
+                    let error_ptr = self.WasmFsExports.IndexDBFileSystem_wasmGetTempStrPtr(self.WasmFsPointer);
+
+                    if (errorMessage && errorMessage != 0) {
                         let memory = new Uint8Array(self.WasmFsMemory.buffer);
-                        let buf_len = self.WasmFsErrorBufferSize - 1;
-                        let msg_len = errorMessage.length;
-                        
-                        let size = buf_len;
-                        if (msg_len < buf_len) {
-                            size = msg_len;
-                        }
-                        
-                        for (let i = 0; i < size; ++i) {
+                        for (let i = 0; i < errorMessage.length; ++i) {
                             memory[error_ptr + i] = errorMessage[i];
                         }
-                        memory[error_ptr + size] = '\0';
-                    }
-                    else if (error_ptr != 0) {
-                        let memory = new Uint8Array(self.WasmFsMemory.buffer);
-                        memory[error_ptr] = '\0';
                     }
 
                     self.WasmFsExports.IndexDBFileSystem_wasmTriggerErrorCallback(error_callback, error_ptr);
                 }
             );
         }
-
-        wasmImportObject["IndexDBFileSystem_wasmLog"] = function(msgPtr, msgLen) {
-            let msgArr = self.WasmFsMemory.subarray(msgPtr, msgPtr + msgLen);
-            let msgStr = utf8decoder.decode(msgArr);
-            self.logConsole(msgStr);
-        }
     }
 
-    InitializeWebAssembly(wasmMemory, wasmExports, wasmFsPointer, errorBufferStringPtr, errorBufferSize) {
+    InitializeWebAssembly(wasmMemory, wasmExports, wasmFsPointer) {
         this.WasmFsPointer = wasmFsPointer;
         this.WasmFsExports = wasmExports;
         this.WasmFsMemory = wasmMemory;
-        this.WasmFsErrorBuffer = errorBufferStringPtr;
-        this.WasmFsErrorBufferSize = errorBufferSize;
-
-        this.WasmFsExports.IndexDBFileSystem_wasmInitializeFileSystem(wasmFsPointer);
     }
-
-    // TODO: Shutdown web assembly (and call it in the objects shutdown if it exists)
 }
