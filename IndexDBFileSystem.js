@@ -1,4 +1,5 @@
-/* IndexDBFileSystem https://www.youtube.com/watch?v=8UFOSQXT_pg
+/* IndexDB tutorial: https://www.youtube.com/watch?v=8UFOSQXT_pg
+
 constructor(databaseName: string, onSuccess: function, onError: function)
 -> onSuccess(self: IndexDBFileSystem): void
 -> onError(errorMessage: string): void
@@ -58,7 +59,6 @@ class IndexDBFileSystem {
         this.Silent = false;
         this.FileWatch = {};
 
-        this.WasmFsPointer = null;
         this.WasmFsExports = null;
         this.WasmFsMemory = null;
         this.WasmFsMemoryU8 = null;
@@ -66,6 +66,7 @@ class IndexDBFileSystem {
         this.WasmFsErrorBufferSize = null;
 
         this.utf8decoder = new TextDecoder("utf8");
+        this.utf8encoder = new TextEncoder();
 
         let callbackIssued = false;
         const OnSuccess = function(arg) {
@@ -210,6 +211,34 @@ class IndexDBFileSystem {
                 self.FileWatch[path] = [];
             }
         }
+    }
+
+    triggerWasmErrorCallback(error_callback, errorMessage) {
+        let self = this;
+        
+        let error_ptr = self.WasmFsErrorBuffer;
+
+        if (errorMessage && errorMessage != 0 && error_ptr != 0) {
+            let error_arr = self.utf8encoder.encode(errorMessage);
+
+            let buf_len = self.WasmFsErrorBufferSize - 1;
+            let msg_len = errorMessage.length;
+            
+            let size = buf_len;
+            if (msg_len < buf_len) {
+                size = msg_len;
+            }
+            
+            for (let i = 0; i < size; ++i) {
+                self.WasmFsMemoryU8[error_ptr + i] = error_arr[i];
+            }
+            self.WasmFsMemoryU8[error_ptr + size] = '\0';
+        }
+        else if (error_ptr != 0) {
+            self.WasmFsMemoryU8[error_ptr] = '\0';
+        }
+
+        self.WasmFsExports.IndexDBFileSystem_wasmTriggerErrorCallback(error_callback, error_ptr);
     }
 
     triggerFileWatchCallbacks(path, isFile) { 
@@ -580,13 +609,19 @@ class IndexDBFileSystem {
         let request = readTransaction.get(fileName);
         request.onsuccess = function (event) {
             let file = event.target.result;
-            if (OnSuccess && !_canceled) {
-                OnSuccess(originalCase, file);
+            if (file) {
+                if (OnSuccess && !_canceled) {
+                    OnSuccess(originalCase, file);
+                }
+            }
+            else if (OnError) {
+                _canceled = true;
+                OnError("Failed to get " + fileName);
             }
         };
         request.onerror = function(event) {
-                _canceled = true;
-                if (OnError) {
+            _canceled = true;
+            if (OnError) {
                 OnError("Failed to get " + fileName);
             }
         }
@@ -1080,6 +1115,78 @@ class IndexDBFileSystem {
     InjectWebAssemblyImportObject(wasmImportObject) {
         let self = this;
 
+        wasmImportObject.env["IndexDBFileSystem_wasmDelete"] = function(name_ptr, name_len, success_callback, error_callback) {
+            let name_arr = self.WasmFsMemoryU8.subarray(name_ptr, name_ptr + name_len);
+            let name_str = self.utf8decoder.decode(name_arr);
+
+            self.Delete(name_str, 
+                function(fileName) {
+                    self.WasmFsExports.IndexDBFileSystem_wasmTriggerPathCallback(success_callback, name_ptr);
+                },
+                function(errorMessage) {
+                    self.triggerWasmErrorCallback(error_callback, errorMessage);
+                }
+            );
+        };
+
+        wasmImportObject.env["IndexDBFileSystem_wasmCreateFile"] = function(name_ptr, name_len, success_callback, error_callback) {
+            let name_arr = self.WasmFsMemoryU8.subarray(name_ptr, name_ptr + name_len);
+            let name_str = self.utf8decoder.decode(name_arr);
+
+            self.CreateFile(name_str, 
+                function(fileName) {
+                    self.WasmFsExports.IndexDBFileSystem_wasmTriggerPathCallback(success_callback, name_ptr);
+                },
+                function(errorMessage) {
+                    self.triggerWasmErrorCallback(error_callback, errorMessage);
+                }
+            );
+        };
+
+        wasmImportObject.env["IndexDBFileSystem_wasmCreateFolder"] = function(name_ptr, name_len, success_callback, error_callback) {
+            let name_arr = self.WasmFsMemoryU8.subarray(name_ptr, name_ptr + name_len);
+            let name_str = self.utf8decoder.decode(name_arr);
+
+            self.CreateFolder(name_str, 
+                function(fileName) {
+                    self.WasmFsExports.IndexDBFileSystem_wasmTriggerPathCallback(success_callback, name_ptr);
+                },
+                function(errorMessage) {
+                    self.triggerWasmErrorCallback(error_callback, errorMessage);
+                }
+            );
+        };
+
+        wasmImportObject.env["IndexDBFileSystem_wasmRead"] = function(name_ptr, name_len, target_ptr, target_size, success_callback, error_callback) {
+            let name_arr = self.WasmFsMemoryU8.subarray(name_ptr, name_ptr + name_len);
+            let name_str = self.utf8decoder.decode(name_arr);
+
+            self.Read(name_str, 
+                function(filePath, fileContent) {
+                    let fileSize = fileContent.size;
+                    if (target_size < fileSize) {
+                        fileSize = target_size;
+                    }
+
+                    let fileReader = new FileReader();
+                    fileReader.onload  = function(event) {
+                        let jsSource = new Uint8Array(event.target.result);
+                        let wasmTarget = self.WasmFsMemoryU8.subarray(target_ptr, target_ptr + target_size);
+
+                        for (let i = 0; i < fileSize; ++i) {
+                            wasmTarget[i] = jsSource[i]; 
+                        }
+
+                        self.WasmFsExports.IndexDBFileSystem_wasmTriggerReadCallback(success_callback, name_ptr, target_ptr, fileSize);
+                    };
+                    fileReader.readAsArrayBuffer(fileContent);
+                },
+                function(errorMessage) {
+                    self.triggerWasmErrorCallback(error_callback, errorMessage);
+                }
+            );
+        };
+
         wasmImportObject.env["IndexDBFileSystem_wasmWrite"] = function(name_ptr, name_len, file_ptr, file_size, success_callback, error_callback) {
             let name_arr = self.WasmFsMemoryU8.subarray(name_ptr, name_ptr + name_len);
             let name_str = self.utf8decoder.decode(name_arr);
@@ -1092,27 +1199,7 @@ class IndexDBFileSystem {
                     self.WasmFsExports.IndexDBFileSystem_wasmTriggerWriteCallback(success_callback, name_ptr, bytesWritten);
                 },
                 function(errorMessage) {
-                    let error_ptr = self.WasmFsErrorBuffer;
-                    
-                    if (errorMessage && errorMessage != 0 && error_ptr != 0) {
-                        let buf_len = self.WasmFsErrorBufferSize - 1;
-                        let msg_len = errorMessage.length;
-                        
-                        let size = buf_len;
-                        if (msg_len < buf_len) {
-                            size = msg_len;
-                        }
-                        
-                        for (let i = 0; i < size; ++i) {
-                            self.WasmFsMemoryU8[error_ptr + i] = errorMessage[i];
-                        }
-                        self.WasmFsMemoryU8[error_ptr + size] = '\0';
-                    }
-                    else if (error_ptr != 0) {
-                        self.WasmFsMemoryU8[error_ptr] = '\0';
-                    }
-
-                    self.WasmFsExports.IndexDBFileSystem_wasmTriggerErrorCallback(error_callback, error_ptr);
+                    self.triggerWasmErrorCallback(error_callback, errorMessage);
                 }
             );
         }
@@ -1124,15 +1211,14 @@ class IndexDBFileSystem {
         }
     }
 
-    InitializeWebAssembly(wasmMemory, wasmExports, wasmFsPointer, errorBufferStringPtr, errorBufferSize) {
-        this.WasmFsPointer = wasmFsPointer;
+    InitializeWebAssembly(wasmMemory, wasmExports, errorBufferStringPtr, errorBufferSize) {
         this.WasmFsExports = wasmExports;
         this.WasmFsMemory = wasmMemory;
         this.WasmFsMemoryU8 = new Uint8Array(wasmMemory.buffer);
         this.WasmFsErrorBuffer = errorBufferStringPtr;
         this.WasmFsErrorBufferSize = errorBufferSize;
 
-        this.WasmFsExports.IndexDBFileSystem_wasmInitializeFileSystem(wasmFsPointer);
+        this.WasmFsExports.IndexDBFileSystem_wasmInitializeFileSystem();
     }
 
     // TODO: Shutdown web assembly (and call it in the objects shutdown if it exists)

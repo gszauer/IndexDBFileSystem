@@ -29,18 +29,17 @@
 
                         WebAssembly.instantiateStreaming(fetch('IndexDBFileSystem.wasm'), importObject).then(prog => {
                             let heap_base = prog.instance.exports.IndexDBFileSystem_wasmGetHeapPtr();
+                            console.log("Heap base: " + heap_base);
                             let BumpAlloc = function(bytes) { // Quick and dirty bump allocator
                                 let result = heap_base;
                                 heap_base += bytes;
                                 return result;
                             }
                             
-                            let fsObjectSize = prog.instance.exports.IndexDBFileSystem_wasmSizeOfFileSystemStruct();
-                            let fsObjectPtr = BumpAlloc(fsObjectSize);
                             let errorStringSize = 1024;
                             let errorStringPtr = BumpAlloc(errorStringSize);
 
-                            fs.InitializeWebAssembly(programMemory, prog.instance.exports, fsObjectPtr, errorStringPtr, errorStringSize);
+                            fs.InitializeWebAssembly(programMemory, prog.instance.exports, errorStringPtr, errorStringSize);
 
                             // File system is set up and ready
                             prog.instance.exports.IndexDBFileSystem_wasmTestFileSystem();
