@@ -20,6 +20,13 @@ extern "C" void IndexDBFileSystem_wasmRead(const char* str_ptr, int str_len, con
 extern "C" void IndexDBFileSystem_wasmCreateFile(const char* name_ptr, int name_len, FileSystem::fpPathCallback success_callback, FileSystem::fpErrorCallback error_callback);
 extern "C" void IndexDBFileSystem_wasmCreateFolder(const char* name_ptr, int name_len, FileSystem::fpPathCallback success_callback, FileSystem::fpErrorCallback error_callback);
 extern "C" void IndexDBFileSystem_wasmDelete(const char* name_ptr, int name_len, FileSystem::fpPathCallback success_callback, FileSystem::fpErrorCallback error_callback);
+extern "C" void IndexDBFileSystem_wasmExists(const char* name_ptr, int name_len, FileSystem::fpExistsCallback success_callback, FileSystem::fpErrorCallback error_callback);
+extern "C" void IndexDBFileSystem_wasmDepthFirstTraversal(const char* name_ptr, int name_len, FileSystem::fpDepthFirstIterateCallback iterate_callback, FileSystem::fpDepthFirstFinishedCallback done_callback);
+extern "C" int  IndexDBFileSystem_wasmWatch(const char* name_ptr, int name_len, FileSystem::fpWatchChangedCallback onchanged);
+extern "C" void IndexDBFileSystem_wasmUnwatch(int unwatchTokenId);
+extern "C" void IndexDBFileSystem_wasmUnwatchAll(const char* name_ptr, int name_len);
+extern "C" int IndexDBFileSystem_wasmIsWatching(const char* name_ptr, int name_len);
+
 extern unsigned char __heap_base;
 
 // Wasm exports
@@ -49,9 +56,29 @@ export void IndexDBFileSystem_wasmTriggerPathCallback(FileSystem::fpPathCallback
     }
 }
 
-export void IndexDBFileSystem_wasmInitializeFileSystem() {
-    FileSystem::Initialize();
+export void IndexDBFileSystem_wasmTriggerExistsCallback(FileSystem::fpExistsCallback callback, const char* file_name, bool isDir, bool isFile) {
+    if (callback) {
+        callback(file_name, isDir, isFile);
+    }
 }
+
+export void IndexDBFileSystem_wasmTriggerDepthFirstIterateCallback(FileSystem::fpDepthFirstIterateCallback callback, const char* path, u32 depth, bool isDirectory, bool isFile) {
+    if (callback) {
+        callback(path, depth, isDirectory, isFile);
+    }
+}
+
+export void IndexDBFileSystem_wasmTriggerDepthFirstFinishedCallback(FileSystem::fpDepthFirstFinishedCallback callback) {
+    if (callback) {
+        callback();
+    }
+}
+
+export void IndexDBFileSystem_wasmTriggerWatchChangedCallback(FileSystem::fpWatchChangedCallback callback, const char* path, bool isDirectory, bool isFile) {
+    if (callback) {
+        callback(path, isDirectory, isFile);
+    }
+ }
 
 export void* IndexDBFileSystem_wasmGetHeapPtr() {
     void* memory = &__heap_base;
@@ -90,28 +117,34 @@ void FileSystem::Delete(const char* path, FileSystem::fpPathCallback onSuccess, 
 }
 
 void FileSystem::Exists(const char* path, FileSystem::fpExistsCallback onSuccess, FileSystem::fpErrorCallback onError) {
-
+    int nameLen = IndexDBFileSystem_strlen(path);
+    IndexDBFileSystem_wasmExists(path, nameLen, onSuccess, onError);
 }
 
 void FileSystem::DepthFirstTraversal(const char* path, FileSystem::fpDepthFirstIterateCallback onIterate, FileSystem::fpDepthFirstFinishedCallback onFinished) {
+    int nameLen = IndexDBFileSystem_strlen(path);
+    IndexDBFileSystem_wasmDepthFirstTraversal(path, nameLen, onIterate, onFinished);
+}
 
+FileSystem::WatchToken FileSystem::Watch(const char* path, FileSystem::fpWatchChangedCallback onChange) {
+    int nameLen = IndexDBFileSystem_strlen(path);
+    FileSystem::WatchToken token;
+    token.wasmId = IndexDBFileSystem_wasmWatch(path, nameLen, onChange);
+    return token;
 }
 
 void FileSystem::Unwatch(FileSystem::WatchToken& token) {
-
+    IndexDBFileSystem_wasmUnwatch(token.wasmId);
 }
 
 void FileSystem::UnwatchAll(const char* path) {
-
+    int nameLen = IndexDBFileSystem_strlen(path);
+    IndexDBFileSystem_wasmUnwatchAll(path, nameLen);
 }
 
 bool FileSystem::IsWatching(const char* path) {
-    return false; // TODO
-}
-
-FileSystem::WatchToken FileSystem::Watch(const char* path, FileSystem::fpWatchChanged onChange) {
-    FileSystem::WatchToken token;
-    return token;
+    int nameLen = IndexDBFileSystem_strlen(path);
+    return (bool)IndexDBFileSystem_wasmIsWatching(path, nameLen);
 }
 
 void FileSystem::Initialize() {
@@ -119,85 +152,5 @@ void FileSystem::Initialize() {
 }
 
 void FileSystem::Shutdown() {
-    // Nothing to do
-}
-
-export void IndexDBFileSystem_wasmTestFileSystem() {
-    const char* content = "File created in C++";
-    FileSystem::Write("Cpp.text", content, IndexDBFileSystem_strlen(content), 
-        [](const char* fileName, u32 bytesWritten) {
-            FileSystem::Log("Successfully wrote Cpp.text");
-
-            static char tmp[512];//= {0};
-            for (int i = 0; i < 512; ++i) {
-                tmp[i] = '\0';
-            }
-
-            FileSystem::Read("test.txt", tmp, 512,
-                [](const char* fileName, void* targetBuffer, u32 bytesRead) {
-                    FileSystem::Log("Successfully read test.txt, content:");
-
-                    char* strTarget = (char*)targetBuffer;
-                    strTarget[bytesRead] = '\0';
-                    int len = IndexDBFileSystem_strlen(strTarget);
-                    IndexDBFileSystem_wasmLog(strTarget, len);
-
-                    FileSystem::CreateFile("FileFromCpp.dummy", 
-                        [](const char* path) {
-                            FileSystem::Log("Successfully created FileFromCpp.dummy");
-
-                            FileSystem::CreateFolder("FolderFromCpp",
-                                [](const char* path) {
-                                    FileSystem::Log("Successfully created FolderFromCpp");
-
-                                    FileSystem::CreateFile("FolderFromCpp/FileFromCpp2.dummy",
-                                        [](const char* path) {
-                                            FileSystem::Delete("FolderFromCpp",
-                                                [](const char* path) {
-                                                    FileSystem::Delete("test.txt", 
-                                                        [](const char* path) {
-                                                            FileSystem::Log("Deleted test.txt");
-
-                                                        },
-                                                        [](const char* error) {
-                                                            FileSystem::Log("Could not delete test.txt");
-                                                            FileSystem::Log(error);
-                                                        }
-                                                    );
-                                                },
-                                                [](const char* error) {
-                                                    FileSystem::Log("Could not delete FolderFromCpp");
-                                                    FileSystem::Log(error);
-                                                }
-                                            );
-                                        },
-                                        [](const char* error) {
-                                            FileSystem::Log("Could not create FileFromCpp2.dummy");
-                                            FileSystem::Log(error);
-                                        }
-                                    );
-                                },
-                                [](const char* error) {
-                                    FileSystem::Log("Could not create FolderFromCpp");
-                                    FileSystem::Log(error);
-                                }
-                            );
-                        },
-                        [](const char* error) {
-                            FileSystem::Log("Could not create FileFromCpp.dummy");
-                            FileSystem::Log(error);
-                        }
-                    );
-                },
-                [](const char* erro) {
-                    FileSystem::Log("Could not read test.txt");
-                    FileSystem::Log(erro);
-                }
-            );
-        },
-        [](const char* erro) {
-            FileSystem::Log("Could not write Cpp.text");
-            FileSystem::Log(erro);
-        }
-    );
+    // Nothing to do....
 }

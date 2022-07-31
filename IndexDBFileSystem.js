@@ -38,7 +38,7 @@ DepthFirstTraversal(path: string, callback: function, finished: function): void
 -> finished(path: string): void
 
 Watch(path: string, OnChanged: function): WatchToken
--> OnChanged(path: string, isFile: bool, isFolder: bool): void
+-> OnChanged(path: string, isFolder: bool, isFile: bool): void
 
 Unwatch(path: string): void
 Unwatch(token: Watchtoken): void
@@ -67,6 +67,7 @@ class IndexDBFileSystem {
 
         this.utf8decoder = new TextDecoder("utf8");
         this.utf8encoder = new TextEncoder();
+        this.WatchId = 0;
 
         let callbackIssued = false;
         const OnSuccess = function(arg) {
@@ -89,7 +90,6 @@ class IndexDBFileSystem {
                 _OnError(arg);
             }
         }
-        
 
         const indexedDB = window.indexedDB || window.webkitIndexedDB || window.mozIndexedDB || window.OIndexedDB || window.msIndexedDB;
         let request = indexedDB.open(databaseName, 2);
@@ -103,15 +103,22 @@ class IndexDBFileSystem {
             };
 
             let readTransaction = self.createIndexReadTransaction();
-            let get = readTransaction.get("index");
-            get.onsuccess = function(event) {
-                if (event.target.result) {
-                    self.Index = event.target.result;
-                    if (OnSuccess) {
-                        OnSuccess(self);
+            let get = readTransaction.get("index",
+                function(path, file) {
+                    if (file) {
+                        self.Index = file;
+                        if (OnSuccess) {
+                            OnSuccess(self);
+                        }
                     }
-                }
-                else {
+                    else {
+                       self.logError("Unexpected, should not be reachable"); 
+                       if (OnError) {
+                            OnError("Unexpected, should not be reachable");
+                       }
+                    }
+                },
+                function(error) {
                     let writeTransaction = self.createIndexWriteTransaction();
                     let root = self.createMetaDataObject();
                     root.isDirectory = true;
@@ -134,13 +141,8 @@ class IndexDBFileSystem {
                     
                     writeTransaction.commit();
                 }
-            }
-            get.onerror = function(event) {
-                self.logError("Error accessing file index meta data");
-                if (OnError) {
-                    OnError("Error accessing file index meta data");
-                }
-            }
+            );
+            
             readTransaction.commit();
         }
        
@@ -202,7 +204,7 @@ class IndexDBFileSystem {
             let watchCallbacks = self.FileWatch[path];
             let numCallbacks = watchCallbacks.length;
             for (let i = 0; i < numCallbacks; ++i) {
-                watchCallbacks[i](path, false, isFolder);
+                watchCallbacks[i].callback(path, isFolder, false);
             }
         }
 
@@ -254,7 +256,7 @@ class IndexDBFileSystem {
             let watchCallbacks = self.FileWatch[path];
             let numCallbacks = watchCallbacks.length;
             for (let i = 0; i < numCallbacks; ++i) {
-                watchCallbacks[i](path, isFile, false);
+                watchCallbacks[i].callback(path, false, isFile);
             }
         }
 
@@ -266,7 +268,7 @@ class IndexDBFileSystem {
                     let watchCallbacks = self.FileWatch[dIter];
                     let numCallbacks = watchCallbacks.length;
                     for (let i = 0; i < numCallbacks; ++i) {
-                        watchCallbacks[i](dIter, false, true);
+                        watchCallbacks[i].callback(dIter, false, true);
                     }
                 }
 
@@ -311,8 +313,25 @@ class IndexDBFileSystem {
         result.commit = function() {
             transaction.commit();
         }
-        result.get = function(key) { // TODO: Add success and error callbacks (like put)
-            return store.get(key);
+        result.get = function(key, OnSuccess, OnError) {
+            let req = store.get(key);
+            req.onsuccess = function (event) {
+                let file = event.target.result;
+                if (file) {
+                    if (OnSuccess) {
+                        OnSuccess(key, file);
+                    }
+                }
+                else if (OnError) {
+                    OnError("Failed  get " + key);
+                }
+            };
+            req.onerror = function(event) {
+                if (OnError) {
+                    OnError("Failed  get " + key);
+                }
+            }
+            return req;
         }
         result.put = function(data, key, OnSuccess, OnError) {
             let req = store.put(data, key);
@@ -328,8 +347,19 @@ class IndexDBFileSystem {
             }
             return req;
         }
-        result.delete = function(key) { // TODO: Add success and error callbacks (like put)
-            return store.delete(key);
+        result.delete = function(key, OnSuccess, OnError) {
+            let req =  store.delete(key);
+            req.onsuccess = function(event) {
+                if (OnSuccess) {
+                    OnSuccess(key);
+                }
+            }
+            req.onerror = function(event) {
+                if (OnError) {
+                    OnError("Failed delete: " + key);
+                }
+            }
+            return req;
         }
 
         return result;
@@ -606,25 +636,25 @@ class IndexDBFileSystem {
             }
         ); // createFileReadTransaction
 
-        let request = readTransaction.get(fileName);
-        request.onsuccess = function (event) {
-            let file = event.target.result;
-            if (file) {
-                if (OnSuccess && !_canceled) {
-                    OnSuccess(originalCase, file);
+        let request = readTransaction.get(fileName,
+            function(path, file) {
+                if (file) {
+                    if (OnSuccess && !_canceled) {
+                        OnSuccess(originalCase, file);
+                    }
+                }
+                else if (OnError) {
+                    _canceled = true;
+                    OnError("Failed to get " + fileName);
+                }
+            },
+            function(error) {
+                _canceled = true;
+                if (OnError) {
+                    OnError("Failed to get " + fileName);
                 }
             }
-            else if (OnError) {
-                _canceled = true;
-                OnError("Failed to get " + fileName);
-            }
-        };
-        request.onerror = function(event) {
-            _canceled = true;
-            if (OnError) {
-                OnError("Failed to get " + fileName);
-            }
-        }
+        );
 
         readTransaction.commit();
     }
@@ -773,6 +803,7 @@ class IndexDBFileSystem {
                         let paths_len = paths.length;
                         for (let j = 0; j < paths_len; ++j) {
                             self.triggerFileWatchCallbacks(paths[j], false);
+                            self.Unwatch(paths[j]); // File deleted, remove all watcher
                             let parentName = self.getParentDirectoryFromPathString(paths[j]);
                             self.triggerFolderWatchCallbacks(parentName, true);
                         }
@@ -858,6 +889,7 @@ class IndexDBFileSystem {
                         let folder_path = remove_folders[i];
                         let parent_path = self.getParentDirectoryFromPathString(folder_path);
                         self.triggerFolderWatchCallbacks(folder_path, false);
+                        self.Unwatch(folder_path); // Folder removed, unwatch it
                         self.triggerFolderWatchCallbacks(parent_path, true);
                     }
                     
@@ -1022,7 +1054,12 @@ class IndexDBFileSystem {
         let self = this;
         const recursiveTraversal = function(indexObject, depth, isDirectory, isFile) {
             if (callback) {
+                if (indexObject.prettyPath == "" && indexObject.parent == null) {
+                    callback("/", depth, isDirectory, isFile);
+                }
+                else {
                 callback(indexObject.prettyPath, depth, isDirectory, isFile);
+                }
             }
 
             if (indexObject.isDirectory) {
@@ -1056,16 +1093,19 @@ class IndexDBFileSystem {
 
         let i_size = this.FileWatch[path].length;
         for (let i = 0; i < i_size; ++i) {
-            if (this.FileWatch[path][i] == OnChanged) {
+            if (this.FileWatch[path][i].callback == OnChanged) {
                 this.logError("Adding duplicate on change handler to: " + path);
             }
         }
 
-        this.FileWatch[path].push(OnChanged);
+        let watchId = this.WatchId++;
 
         let watchToken = {}
         watchToken.path = path;
         watchToken.callback = OnChanged;
+        watchToken.id = watchId;
+        
+        this.FileWatch[path].push(watchToken);
         return watchToken;
     }
 
@@ -1081,13 +1121,14 @@ class IndexDBFileSystem {
         }
         else {
             let path = watchReturnToken.path;
-            let OnChanged = watchReturnToken.callback;
+            //let OnChanged = watchReturnToken.callback;
+            let id = watchReturnToken.id;
 
             if (this.FileWatch.hasOwnProperty(path)) {
                 let i_size = this.FileWatch[path].length;
                 let to_remove = -1;
                 for (let i = 0; i < i_size; ++i) {
-                    if (this.FileWatch[path][i] == OnChanged) {
+                    if (this.FileWatch[path][i].id == id) {
                         to_remove = i;
                         break;
                     }
@@ -1114,6 +1155,118 @@ class IndexDBFileSystem {
 
     InjectWebAssemblyImportObject(wasmImportObject) {
         let self = this;
+
+        wasmImportObject.env["IndexDBFileSystem_wasmIsWatching"] = function(name_ptr, name_len) {
+            let filePath = self.utf8decoder.decode(self.WasmFsMemoryU8.subarray(name_ptr, name_ptr + name_len));
+            if (self.IsWatching(filePath)) {
+                return 1;
+            }
+            return 0;
+        };
+
+        wasmImportObject.env["IndexDBFileSystem_wasmUnwatchAll"] = function(name_ptr, name_len) {
+            let filePath = self.utf8decoder.decode(self.WasmFsMemoryU8.subarray(name_ptr, name_ptr + name_len));
+            self.Unwatch(filePath);
+        };
+
+        wasmImportObject.env["IndexDBFileSystem_wasmUnwatch"] = function(unwatchTokenId) {
+            let token = null;
+
+            let allWatchNames = Object.getOwnPropertyNames(self.FileWatch);
+            let numWatches = allWatchNames.length;
+            for (let w = 0; w < numWatches; ++w) {
+                if (Array.isArray(self.FileWatch[allWatchNames[w]])) {
+                    let callbacks = self.FileWatch[allWatchNames[w]];
+                    let numCallbacks = callbacks.length;
+                    for (let i = 0; i < numCallbacks; ++i) {
+                        if (callbacks[i].id == unwatchTokenId) {
+                            token = callbacks[i];
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (token == null) {
+                self.logError("IndexDBFileSystem_wasmUnwatch: Can't find unwatch token: " + unwatchTokenId);
+            }
+            else {
+                self.Unwatch(token);
+            }
+        };
+
+        wasmImportObject.env["IndexDBFileSystem_wasmWatch"] = function(name_ptr, name_len, onchanged) {
+            let filePath = self.utf8decoder.decode(self.WasmFsMemoryU8.subarray(name_ptr, name_ptr + name_len));
+            let watchToken = self.Watch(filePath, function(path, isDir, isFile) {
+                let path_ptr = self.WasmFsErrorBuffer;
+
+                if (name_ptr && name_len != 0 && path_ptr != 0) {
+                    let name_arr = self.utf8encoder.encode(path);
+                    let buf_len = self.WasmFsErrorBufferSize - 1;
+                    let msg_len = path.length;
+                    
+                    let size = buf_len;
+                    if (msg_len < buf_len) {
+                        size = msg_len;
+                    }
+                    
+                    for (let i = 0; i < size; ++i) {
+                        self.WasmFsMemoryU8[path_ptr + i] = name_arr[i];
+                    }
+                    self.WasmFsMemoryU8[path_ptr + size] = '\0';
+                }
+                else if (path_ptr != 0) {
+                    self.WasmFsMemoryU8[path_ptr] = '\0';
+                }
+
+                self.WasmFsExports.IndexDBFileSystem_wasmTriggerWatchChangedCallback(onchanged, path_ptr, isDir, isFile);
+            });
+
+            return watchToken.id;
+        };
+
+        wasmImportObject.env["IndexDBFileSystem_wasmDepthFirstTraversal"] = function(name_ptr, name_len, iterate_callback, done_callback) {
+            let filePath = self.utf8decoder.decode(self.WasmFsMemoryU8.subarray(name_ptr, name_ptr + name_len));
+
+            self.DepthFirstTraversal(filePath, 
+                function(path, depth, isDirectory, isFile) {
+                    let path_ptr = self.WasmFsErrorBuffer;
+                    if (name_ptr && name_len != 0 && path_ptr != 0) {
+                        let name_arr = self.utf8encoder.encode(path);
+
+                        let buf_len = self.WasmFsErrorBufferSize - 1;
+                        let msg_len = path.length;
+                        
+                        let size = buf_len;
+                        if (msg_len < buf_len) {
+                            size = msg_len;
+                        }
+                        
+                        for (let i = 0; i < size; ++i) {
+                            self.WasmFsMemoryU8[path_ptr + i] = name_arr[i];
+                        }
+                        self.WasmFsMemoryU8[path_ptr + size] = '\0';
+                    }
+                    else if (path_ptr != 0) {
+                        self.WasmFsMemoryU8[path_ptr] = '\0';
+                    }
+
+                    self.WasmFsExports.IndexDBFileSystem_wasmTriggerDepthFirstIterateCallback(iterate_callback, path_ptr, depth, isDirectory, isFile);
+                },
+                function(path) {
+                    self.WasmFsExports.IndexDBFileSystem_wasmTriggerDepthFirstFinishedCallback(done_callback);
+                }
+            );
+        };
+
+        wasmImportObject.env["IndexDBFileSystem_wasmExists"] = function(name_ptr, name_len, success_callback, error_callback) {
+            let name_arr = self.WasmFsMemoryU8.subarray(name_ptr, name_ptr + name_len);
+            let name_str = self.utf8decoder.decode(name_arr);
+
+            self.Exists(name_str, function(path, isDir, isFile) {
+                self.WasmFsExports.IndexDBFileSystem_wasmTriggerExistsCallback(success_callback, name_ptr, isDir, isFile);
+            });
+        };
 
         wasmImportObject.env["IndexDBFileSystem_wasmDelete"] = function(name_ptr, name_len, success_callback, error_callback) {
             let name_arr = self.WasmFsMemoryU8.subarray(name_ptr, name_ptr + name_len);
@@ -1217,9 +1370,7 @@ class IndexDBFileSystem {
         this.WasmFsMemoryU8 = new Uint8Array(wasmMemory.buffer);
         this.WasmFsErrorBuffer = errorBufferStringPtr;
         this.WasmFsErrorBufferSize = errorBufferSize;
-
-        this.WasmFsExports.IndexDBFileSystem_wasmInitializeFileSystem();
     }
 
-    // TODO: Shutdown web assembly (and call it in the objects shutdown if it exists)
+    ShutdownWebAssembly() { }
 }

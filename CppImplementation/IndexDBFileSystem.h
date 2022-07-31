@@ -8,7 +8,7 @@
 
 namespace FileSystem {
     struct WatchToken {
-        int TODO;
+        int wasmId;
     };
 
     typedef void (*fpErrorCallback)(const char* error);
@@ -35,8 +35,8 @@ namespace FileSystem {
     typedef void (*fpDepthFirstFinishedCallback)();
     void DepthFirstTraversal(const char* path, fpDepthFirstIterateCallback onIterate, fpDepthFirstFinishedCallback onFinished);
 
-    typedef void (*fpWatchChanged)(const char* path, bool isDirectory, bool isFile);
-    WatchToken Watch(const char* path, fpWatchChanged onChange);
+    typedef void (*fpWatchChangedCallback)(const char* path, bool isDirectory, bool isFile);
+    WatchToken Watch(const char* path, fpWatchChangedCallback onChange);
 
     void Unwatch(WatchToken& token);
     void UnwatchAll(const char* path);

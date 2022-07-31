@@ -151,7 +151,7 @@ IsWatching(path: string): bool
 
 ### File Watcher callback
 ```
-OnChanged(path: string, isFile: bool, isFolder: bool): void
+OnChanged(path: string, isFolder: bool, isFile: bool): void
 ```
 
 ## C++ API
