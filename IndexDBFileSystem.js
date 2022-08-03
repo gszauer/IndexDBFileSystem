@@ -44,6 +44,10 @@ Unwatch(path: string): void
 Unwatch(token: Watchtoken): void
 
 IsWatching(path: string): bool
+
+InjectWebAssemblyImportObject(wasmImportObject: object): void
+InitializeWebAssembly(wasmMemory: object, wasmExports: object, errorBufferStringPtr: int, errorBufferSize: int): void
+ShutdownWebAssembly(): void
 */
 
 
@@ -643,9 +647,10 @@ class IndexDBFileSystem {
                         OnSuccess(originalCase, file);
                     }
                 }
-                else if (OnError) {
-                    _canceled = true;
-                    OnError("Failed to get " + fileName);
+                else {
+                    if (OnSuccess && !_canceled) {
+                        OnSuccess(originalCase, null);
+                    }
                 }
             },
             function(error) {
