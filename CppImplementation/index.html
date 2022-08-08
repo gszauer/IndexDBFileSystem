@@ -5,7 +5,7 @@
         <meta charset="utf-8">  
         <title>IndexDB File System C++ Wasm Sample</title>  
         <meta name="description" content="WebFS Sample">  
-        <script type="text/javascript" src="../IndexDBFileSystem.js"></script>
+        <script type="text/javascript" src="../FileSystem.js"></script>
         <script type="text/javascript">
           
             function init() {
@@ -27,7 +27,7 @@
 
                         fs.InjectWebAssemblyImportObject(importObject);
 
-                        WebAssembly.instantiateStreaming(fetch('IndexDBFileSystem.wasm'), importObject).then(prog => {
+                        WebAssembly.instantiateStreaming(fetch('FileSystem.wasm'), importObject).then(prog => {
                             let heap_base = prog.instance.exports.IndexDBFileSystem_wasmGetHeapPtr();
                             console.log("Heap base: " + heap_base);
                             let BumpAlloc = function(bytes) { // Quick and dirty bump allocator

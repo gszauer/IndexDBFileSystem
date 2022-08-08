@@ -1,4 +1,4 @@
-#include "IndexDBFileSystem.h"
+#include "FileSystem.h"
 
 // Helper functions
 int IndexDBFileSystem_strlen(const char* str) {

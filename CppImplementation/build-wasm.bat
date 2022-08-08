@@ -16,7 +16,7 @@ C:/WASM/clang.exe -x c++ ^
     -D _WASM32=1 ^
     -D DEBUG=1 ^
     -D _DEBUG=1 ^
-    -o IndexDBFileSystem.wasm ^
-    IndexDBFileSystem-wasm.cpp
+    -o FileSystem.wasm ^
+    ../FileSystem-wasm.cpp
 
 REM; COPY /Y "..\IndexDBFileSystem.js" "IndexDBFileSystem.js"
