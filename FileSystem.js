@@ -33,7 +33,7 @@ IsFile(path: string, callback: function): void
 Exists(path: string, callback: function): void
 -> callback(path: string, isDirectory: bool, isFile: bool): void
 
-DepthFirstTraversal(path: string, callback: function, finished: function): void
+DepthFirstTraversal(path: string, preOrder: bool, callback: function, finished: function): void
 -> callback(path: string, depth: int, isDirectory: bool, isFile: bool): void
 -> finished(path: string): void
 
@@ -1050,39 +1050,61 @@ class IndexDBFileSystem {
         }
     }
 
-    DepthFirstTraversal(path, callback, finished) {
+    DepthFirstTraversal(path, preOrder, callback, finished) {
         path = path.toLowerCase();
         if (!path.startsWith("/")) {
             path = "/" + path;
         }
 
         let self = this;
-        const recursiveTraversal = function(indexObject, depth, isDirectory, isFile) {
-            if (callback) {
-                if (indexObject.prettyPath == "" && indexObject.parent == null) {
-                    callback("/", depth, isDirectory, isFile);
-                }
-                else {
-                callback(indexObject.prettyPath, depth, isDirectory, isFile);
+        const recursiveTraversal = function(indexObject, preOrder, depth, isDirectory, isFile) {
+            if (preOrder) {
+                if (callback) {
+                    if (indexObject.prettyPath == "" && indexObject.parent == null) {
+                        callback("/", depth, isDirectory, isFile);
+                    }
+                    else {
+                        callback(indexObject.prettyPath, depth, isDirectory, isFile);
+                    }
                 }
             }
 
             if (indexObject.isDirectory) {
                 let i_len = indexObject.children.length;
                 for (let i = 0; i < i_len; ++i) {
-                    recursiveTraversal(indexObject.children[i], depth + 1,
+                    recursiveTraversal(indexObject.children[i], 
+                        preOrder, depth + 1,
                         indexObject.children[i].isDirectory,
                         indexObject.children[i].isFile);
+                }
+            }
+
+            if (!preOrder) {
+                if (callback) {
+                    if (indexObject.prettyPath == "" && indexObject.parent == null) {
+                        callback("/", depth, isDirectory, isFile);
+                    }
+                    else {
+                        callback(indexObject.prettyPath, depth, isDirectory, isFile);
+                    }
                 }
             }
         }
 
         let indexObject = self.getIndexObjectFromPathString(path);
-        recursiveTraversal(indexObject, 0, indexObject.isDirectory, indexObject.isFile);
+        recursiveTraversal(indexObject, preOrder, 0, indexObject.isDirectory, indexObject.isFile);
 
         if (finished) {
             finished(path);
         }
+    }
+
+    PreOrderDepthFirstTraversal(path, preOrder, callback, finished) {
+        this.DepthFirstTraversal(path, true, callback, finished);
+    }
+
+    PostOrderDepthFirstTraversal(path, preOrder, callback, finished) {
+        this.DepthFirstTraversal(path, false, callback, finished);
     }
 
     // OnChanged(path: string, isFile: bool, isFolder: bool): watchToken
@@ -1230,10 +1252,10 @@ class IndexDBFileSystem {
             return watchToken.id;
         };
 
-        wasmImportObject.env["IndexDBFileSystem_wasmDepthFirstTraversal"] = function(name_ptr, name_len, iterate_callback, done_callback) {
+        wasmImportObject.env["IndexDBFileSystem_wasmPreDepthFirstTraversal"] = function(name_ptr, name_len, iterate_callback, done_callback) {
             let filePath = self.utf8decoder.decode(self.WasmFsMemoryU8.subarray(name_ptr, name_ptr + name_len));
 
-            self.DepthFirstTraversal(filePath, 
+            self.DepthFirstTraversal(filePath, true,
                 function(path, depth, isDirectory, isFile) {
                     let path_ptr = self.WasmFsErrorBuffer;
                     if (name_ptr && name_len != 0 && path_ptr != 0) {
@@ -1264,7 +1286,42 @@ class IndexDBFileSystem {
             );
         };
 
-        wasmImportObject.env["IndexDBFileSystem_wasmExists"] = function(name_ptr, name_len, success_callback, error_callback) {
+        // Same as pre, but it passes false to self.DepthFirstTraversal
+        wasmImportObject.env["IndexDBFileSystem_wasmPostDepthFirstTraversal"] = function(name_ptr, name_len, iterate_callback, done_callback) {
+            let filePath = self.utf8decoder.decode(self.WasmFsMemoryU8.subarray(name_ptr, name_ptr + name_len));
+
+            self.DepthFirstTraversal(filePath, false,
+                function(path, depth, isDirectory, isFile) {
+                    let path_ptr = self.WasmFsErrorBuffer;
+                    if (name_ptr && name_len != 0 && path_ptr != 0) {
+                        let name_arr = self.utf8encoder.encode(path);
+
+                        let buf_len = self.WasmFsErrorBufferSize - 1;
+                        let msg_len = path.length;
+                        
+                        let size = buf_len;
+                        if (msg_len < buf_len) {
+                            size = msg_len;
+                        }
+                        
+                        for (let i = 0; i < size; ++i) {
+                            self.WasmFsMemoryU8[path_ptr + i] = name_arr[i];
+                        }
+                        self.WasmFsMemoryU8[path_ptr + size] = '\0';
+                    }
+                    else if (path_ptr != 0) {
+                        self.WasmFsMemoryU8[path_ptr] = '\0';
+                    }
+
+                    self.WasmFsExports.IndexDBFileSystem_wasmTriggerDepthFirstIterateCallback(iterate_callback, path_ptr, depth, isDirectory, isFile);
+                },
+                function(path) {
+                    self.WasmFsExports.IndexDBFileSystem_wasmTriggerDepthFirstFinishedCallback(done_callback);
+                }
+            );
+        };
+
+        wasmImportObject.env["IndexDBFileSystem_wasmExists"] = function(name_ptr, name_len, success_callback) {
             let name_arr = self.WasmFsMemoryU8.subarray(name_ptr, name_ptr + name_len);
             let name_str = self.utf8decoder.decode(name_arr);
 

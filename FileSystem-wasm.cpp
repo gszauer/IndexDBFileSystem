@@ -20,8 +20,9 @@ extern "C" void IndexDBFileSystem_wasmRead(const char* str_ptr, int str_len, con
 extern "C" void IndexDBFileSystem_wasmCreateFile(const char* name_ptr, int name_len, FileSystem::fpPathCallback success_callback, FileSystem::fpErrorCallback error_callback);
 extern "C" void IndexDBFileSystem_wasmCreateFolder(const char* name_ptr, int name_len, FileSystem::fpPathCallback success_callback, FileSystem::fpErrorCallback error_callback);
 extern "C" void IndexDBFileSystem_wasmDelete(const char* name_ptr, int name_len, FileSystem::fpPathCallback success_callback, FileSystem::fpErrorCallback error_callback);
-extern "C" void IndexDBFileSystem_wasmExists(const char* name_ptr, int name_len, FileSystem::fpExistsCallback success_callback, FileSystem::fpErrorCallback error_callback);
-extern "C" void IndexDBFileSystem_wasmDepthFirstTraversal(const char* name_ptr, int name_len, FileSystem::fpDepthFirstIterateCallback iterate_callback, FileSystem::fpDepthFirstFinishedCallback done_callback);
+extern "C" void IndexDBFileSystem_wasmExists(const char* name_ptr, int name_len, FileSystem::fpExistsCallback success_callback);
+extern "C" void IndexDBFileSystem_wasmPreDepthFirstTraversal(const char* name_ptr, int name_len, FileSystem::fpDepthFirstIterateCallback iterate_callback, FileSystem::fpDepthFirstFinishedCallback done_callback);
+extern "C" void IndexDBFileSystem_wasmPostDepthFirstTraversal(const char* name_ptr, int name_len, FileSystem::fpDepthFirstIterateCallback iterate_callback, FileSystem::fpDepthFirstFinishedCallback done_callback);
 extern "C" int  IndexDBFileSystem_wasmWatch(const char* name_ptr, int name_len, FileSystem::fpWatchChangedCallback onchanged);
 extern "C" void IndexDBFileSystem_wasmUnwatch(int unwatchTokenId);
 extern "C" void IndexDBFileSystem_wasmUnwatchAll(const char* name_ptr, int name_len);
@@ -116,14 +117,19 @@ void FileSystem::Delete(const char* path, FileSystem::fpPathCallback onSuccess, 
     IndexDBFileSystem_wasmDelete(path, nameLen, onSuccess, onError);
 }
 
-void FileSystem::Exists(const char* path, FileSystem::fpExistsCallback onSuccess, FileSystem::fpErrorCallback onError) {
+void FileSystem::Exists(const char* path, FileSystem::fpExistsCallback onSuccess) {
     int nameLen = IndexDBFileSystem_strlen(path);
-    IndexDBFileSystem_wasmExists(path, nameLen, onSuccess, onError);
+    IndexDBFileSystem_wasmExists(path, nameLen, onSuccess);
 }
 
-void FileSystem::DepthFirstTraversal(const char* path, FileSystem::fpDepthFirstIterateCallback onIterate, FileSystem::fpDepthFirstFinishedCallback onFinished) {
+void FileSystem::PreOrderDepthFirstTraversal(const char* path, FileSystem::fpDepthFirstIterateCallback onIterate, FileSystem::fpDepthFirstFinishedCallback onFinished) {
     int nameLen = IndexDBFileSystem_strlen(path);
-    IndexDBFileSystem_wasmDepthFirstTraversal(path, nameLen, onIterate, onFinished);
+    IndexDBFileSystem_wasmPreDepthFirstTraversal(path, nameLen, onIterate, onFinished); // TODO: Fix
+}
+
+void FileSystem::PostOrderDepthFirstTraversal(const char* path, FileSystem::fpDepthFirstIterateCallback onIterate, FileSystem::fpDepthFirstFinishedCallback onFinished) {
+    int nameLen = IndexDBFileSystem_strlen(path);
+    IndexDBFileSystem_wasmPostDepthFirstTraversal(path, nameLen, onIterate, onFinished); // TODO: Fix
 }
 
 FileSystem::WatchToken FileSystem::Watch(const char* path, FileSystem::fpWatchChangedCallback onChange) {

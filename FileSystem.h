@@ -6,6 +6,8 @@
 	static_assert (sizeof(u32) == 4, "u32 should be defined as a 4 byte type");
 #endif 
 
+#undef CreateFile
+
 namespace FileSystem {
     struct WatchToken {
         int wasmId;
@@ -29,11 +31,14 @@ namespace FileSystem {
     void Delete(const char* path, fpPathCallback onSuccess, fpErrorCallback onError);
 
     typedef void (*fpExistsCallback)(const char* path, bool isDirectory, bool isFile);
-    void Exists(const char* path, fpExistsCallback onSuccess, fpErrorCallback onError);
+    void Exists(const char* path, fpExistsCallback onSuccess);
 
     typedef void (*fpDepthFirstIterateCallback)(const char* path, u32 depth, bool isDirectory, bool isFile);
-    typedef void (*fpDepthFirstFinishedCallback)();
-    void DepthFirstTraversal(const char* path, fpDepthFirstIterateCallback onIterate, fpDepthFirstFinishedCallback onFinished);
+    typedef void (*fpDepthFirstFinishedCallback)(); // TODO: Rename to empty callback
+    void PreOrderDepthFirstTraversal(const char* path, fpDepthFirstIterateCallback onIterate, fpDepthFirstFinishedCallback onFinished);
+    void PostOrderDepthFirstTraversal(const char* path, fpDepthFirstIterateCallback onIterate, fpDepthFirstFinishedCallback onFinished);
+
+    // TODO: Win32 style GetFirstChild function for iterating a directory
 
     typedef void (*fpWatchChangedCallback)(const char* path, bool isDirectory, bool isFile);
     WatchToken Watch(const char* path, fpWatchChangedCallback onChange);

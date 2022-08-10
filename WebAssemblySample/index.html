@@ -42,7 +42,6 @@
                             fs.InitializeWebAssembly(programMemory, prog.instance.exports, errorStringPtr, errorStringSize);
 
                             // File system is set up and ready
-                            prog.instance.exports.IndexDBFileSystem_wasmTestFileSystem();
                         });
                     },
                     function(_error) { // Error
