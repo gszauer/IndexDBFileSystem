@@ -114,12 +114,12 @@ void FileSystem::Exists(const char* path, FileSystem::fpExistsCallback onSuccess
 
 void FileSystem::PreOrderDepthFirstTraversal(const char* path, FileSystem::fpDepthFirstIterateCallback onIterate, FileSystem::fpDepthFirstFinishedCallback onFinished) {
     int nameLen = IndexDBFileSystem_strlen(path);
-    IndexDBFileSystem_wasmPreDepthFirstTraversal(path, nameLen, onIterate, onFinished); // TODO: Fix
+    IndexDBFileSystem_wasmPreDepthFirstTraversal(path, nameLen, onIterate, onFinished);
 }
 
 void FileSystem::PostOrderDepthFirstTraversal(const char* path, FileSystem::fpDepthFirstIterateCallback onIterate, FileSystem::fpDepthFirstFinishedCallback onFinished) {
     int nameLen = IndexDBFileSystem_strlen(path);
-    IndexDBFileSystem_wasmPostDepthFirstTraversal(path, nameLen, onIterate, onFinished); // TODO: Fix
+    IndexDBFileSystem_wasmPostDepthFirstTraversal(path, nameLen, onIterate, onFinished);
 }
 
 void FileSystem::GetWorkingDir(char* outBuffer, u32 buffLen) {

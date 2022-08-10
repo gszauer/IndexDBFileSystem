@@ -3,6 +3,7 @@
 
 #undef CreateFile
 #define CUSTOM_PATH_LEN 512
+char gFileSystem_NameBuffer[CUSTOM_PATH_LEN];
 
 namespace FileSystem {
 	namespace Internal {
@@ -336,16 +337,15 @@ void FileSystem::Delete(const char* path, fpPathCallback onSuccess, fpErrorCallb
 		}
 	}
 	else if (ftyp & FILE_ATTRIBUTE_DIRECTORY) {
-		char tmpName[CUSTOM_PATH_LEN]; // TODO: Could be a dynamic buffer
-		GetCurrentDirectoryA(CUSTOM_PATH_LEN, tmpName);
+		GetCurrentDirectoryA(CUSTOM_PATH_LEN, gFileSystem_NameBuffer);
 		u32 len = 0;
-		for (char* t = tmpName; *t != '\0'; t++, len++);
-		if (tmpName[len - 1] != '\\') {
-			tmpName[len++] = '\\';
-			tmpName[len] = '\0';
+		for (char* t = gFileSystem_NameBuffer; *t != '\0'; t++, len++);
+		if (gFileSystem_NameBuffer[len - 1] != '\\') {
+			gFileSystem_NameBuffer[len++] = '\\';
+			gFileSystem_NameBuffer[len] = '\0';
 		}
 
-		Internal::RecursiveDelete(path, tmpName, len);
+		Internal::RecursiveDelete(path, gFileSystem_NameBuffer, len);
 
 		DWORD ftyp = GetFileAttributesA(path);
 		if (ftyp == INVALID_FILE_ATTRIBUTES) {
@@ -392,16 +392,15 @@ void FileSystem::PreOrderDepthFirstTraversal(const char* path, fpDepthFirstItera
 		return;
 	}
 
-	char tmpName[CUSTOM_PATH_LEN]; // TODO: Could be a dynamic buffer
-	GetCurrentDirectoryA(CUSTOM_PATH_LEN, tmpName);
+	GetCurrentDirectoryA(CUSTOM_PATH_LEN, gFileSystem_NameBuffer);
 	u32 len = 0;
-	for (char* t = tmpName; *t != '\0'; t++, len++);
-	if (tmpName[len - 1] != '\\') {
-		tmpName[len++] = '\\';
-		tmpName[len] = '\0';
+	for (char* t = gFileSystem_NameBuffer; *t != '\0'; t++, len++);
+	if (gFileSystem_NameBuffer[len - 1] != '\\') {
+		gFileSystem_NameBuffer[len++] = '\\';
+		gFileSystem_NameBuffer[len] = '\0';
 	}
 
-	Internal::Traverse(path, tmpName, len, true, 0, onIterate);
+	Internal::Traverse(path, gFileSystem_NameBuffer, len, true, 0, onIterate);
 
 	if (onFinished) {
 		onFinished();
@@ -427,16 +426,15 @@ void FileSystem::PostOrderDepthFirstTraversal(const char* path, fpDepthFirstIter
 		return;
 	}
 
-	char tmpName[CUSTOM_PATH_LEN]; // TODO: Could be a dynamic buffer
-	GetCurrentDirectoryA(CUSTOM_PATH_LEN, tmpName);
+	GetCurrentDirectoryA(CUSTOM_PATH_LEN, gFileSystem_NameBuffer);
 	u32 len = 0;
-	for (char* t = tmpName; *t != '\0'; t++, len++);
-	if (tmpName[len - 1] != '\\') {
-		tmpName[len++] = '\\';
-		tmpName[len] = '\0';
+	for (char* t = gFileSystem_NameBuffer; *t != '\0'; t++, len++);
+	if (gFileSystem_NameBuffer[len - 1] != '\\') {
+		gFileSystem_NameBuffer[len++] = '\\';
+		gFileSystem_NameBuffer[len] = '\0';
 	}
 
-	Internal::Traverse(path, tmpName, len, false, 0, onIterate);
+	Internal::Traverse(path, gFileSystem_NameBuffer, len, false, 0, onIterate);
 
 	if (onFinished) {
 		onFinished();
@@ -444,7 +442,6 @@ void FileSystem::PostOrderDepthFirstTraversal(const char* path, fpDepthFirstIter
 }
 
 void FileSystem::Initialize() {
-	// TODO: Set current directory to work out of?
 }
 
 void FileSystem::Shutdown() {

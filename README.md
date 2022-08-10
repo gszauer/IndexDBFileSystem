@@ -158,8 +158,10 @@ The callback to ```Exists``` takes the path of the file being checked, and two b
 ## Directory traversal
 
 ```
-DepthFirstTraversal(path: string, callback: function, finished: function): void
+DepthFirstTraversal(path: string, preOrder: bool, callback: function, finished: function): void
 ```
+
+Used to traverse a given directory, the second argument specifies if the traversal is pre or post order. There are also ```PreOrderDepthFirstTraversal``` and ```PostOrderDepthFirstTraversal``` functions that don't take this additional paramater.
 
 ### Directory traversal callback
 
@@ -168,29 +170,4 @@ callback(path: string, depth: int, isDirectory: bool, isFile: bool): void
 finished(path: string): void
 ```
 
-## File Watcher
-```
-Watch(path: string, OnChanged: function): WatchToken
-```
-
-```
-Unwatch(path: string): void
-Unwatch(token: Watchtoken): void
-```
-
-```
-IsWatching(path: string): bool
-```
-
-### File Watcher callback
-```
-OnChanged(path: string, isFolder: bool, isFile: bool): void
-```
-
-## C++ API
-
-TODO
-
-InjectWebAssemblyImportObject(wasmImportObject: object): void
-InitializeWebAssembly(wasmMemory: object, wasmExports: object, errorBufferStringPtr: int, errorBufferSize: int): void
-ShutdownWebAssembly(): void
+The callback function is called for every directory being traversed. It includes the full path of the directory or file, it's depth and booleans to tell if it's a file or folder. When iteration is finished, the finished callback is called with the original path.

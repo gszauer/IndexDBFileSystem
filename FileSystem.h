@@ -8,6 +8,7 @@
 
 #undef CreateFile
 
+
 namespace FileSystem {
     typedef void (*fpErrorCallback)(const char* error);
     typedef void (*fpPathCallback)(const char* path);
@@ -33,8 +34,6 @@ namespace FileSystem {
     typedef void (*fpDepthFirstFinishedCallback)(); // TODO: Rename to empty callback
     void PreOrderDepthFirstTraversal(const char* path, fpDepthFirstIterateCallback onIterate, fpDepthFirstFinishedCallback onFinished);
     void PostOrderDepthFirstTraversal(const char* path, fpDepthFirstIterateCallback onIterate, fpDepthFirstFinishedCallback onFinished);
-
-    // TODO: Win32 style GetFirstChild function for iterating a directory
 
     void GetWorkingDir(char* outBuffer, u32 buffLen);
 
