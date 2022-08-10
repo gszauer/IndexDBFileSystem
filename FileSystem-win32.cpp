@@ -51,7 +51,165 @@ namespace FileSystem {
 				*isFile = true;
 			}
 		}
+
+		void Traverse(const char* path, char* dirBuff, u32 dirLen, bool pre, u32 depth, fpDepthFirstIterateCallback onIterate) {
+			u32 pathLen = 0;
+			u32 local_i = 0;
+			{ // Copy path to tmpPath
+				for (local_i = 0; local_i < MAX_PATH; ++local_i) {
+					dirBuff[local_i + dirLen] = path[local_i];
+					if (path[local_i] == '\0') {
+						break;
+					}
+				}
+
+				pathLen = local_i;
+				dirBuff[dirLen + pathLen] = '\0';
+			}
+
+			bool isDir = false;
+			bool isFile = false;
+			Internal::GetInfo(dirBuff, &isDir, &isFile);
+
+			if (!isDir && !isFile) {
+				Log("Error traversing directory, non existant object?\n");
+				return;
+			}
+			else if (isDir && isFile) {
+				Log("Error traversing directory, both a directory and file?\n");
+				return;
+			}
+
+			if (isDir) {
+				if (pre) {
+					if (onIterate) {
+						onIterate(dirBuff, depth, isDir, isFile);
+					}
+				}
+
+				{ // Add \*.*
+					if (dirBuff[(local_i - 1) + dirLen] != '\\') {
+						dirBuff[dirLen + local_i++] = '\\';
+					}
+					pathLen = local_i;
+
+					if (dirBuff[dirLen + (local_i - 1)] != '*') {
+						dirBuff[dirLen + local_i++] = '*';
+					}
+
+					if (dirBuff[dirLen + (local_i - 1)] != '.') {
+						dirBuff[dirLen + local_i++] = '.';
+					}
+
+					if (dirBuff[dirLen + (local_i - 1)] != '*') {
+						dirBuff[dirLen + local_i++] = '*';
+					}
+
+					dirBuff[dirLen + local_i] = '\0';
+				}
+
+				WIN32_FIND_DATAA ffd;
+				HANDLE currentFile = FindFirstFileA(dirBuff, &ffd);
+				dirBuff[dirLen + pathLen] = '\0'; // Remove \*.* from end of path
+				BOOL nextfileFound = FindNextFileA(currentFile, &ffd); // .
+				nextfileFound = FindNextFileA(currentFile, &ffd); // ..
+				while (nextfileFound) {
+					bool isDirectory = ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY;
+					Traverse(ffd.cFileName, dirBuff, dirLen + pathLen, pre, depth + 1, onIterate);
+					nextfileFound = FindNextFileA(currentFile, &ffd);
+				}
+				FindClose(currentFile);
+
+				if (!pre) {
+					if (onIterate) {
+						onIterate(dirBuff, depth, isDir, isFile);
+					}
+				}
+				dirBuff[dirLen] = '\0';
+			}
+			else { // Is file
+				if (onIterate) {
+					onIterate(dirBuff, depth, isDir, isFile);
+				}
+				dirBuff[dirLen] = '\0';
+			}
+		}
+
+		void RecursiveDelete(const char* path, char* dirBuff, u32 dirLen) {
+			u32 pathLen = 0;
+			u32 local_i = 0;
+			{ // Copy path to tmpPath
+				for (local_i = 0; local_i < MAX_PATH; ++local_i) {
+					dirBuff[local_i + dirLen] = path[local_i];
+					if (path[local_i] == '\0') {
+						break;
+					}
+				}
+
+				pathLen = local_i;
+				dirBuff[dirLen + pathLen] = '\0';
+			}
+
+			bool isDir = false;
+			bool isFile = false;
+			Internal::GetInfo(dirBuff, &isDir, &isFile);
+
+			if (isDir) {
+				{ // Add \*.*
+					if (dirBuff[(local_i - 1) + dirLen] != '\\') {
+						dirBuff[dirLen + local_i++] = '\\';
+					}
+
+					pathLen = local_i;
+
+					if (dirBuff[dirLen + (local_i - 1)] != '*') {
+						dirBuff[dirLen + local_i++] = '*';
+					}
+
+					if (dirBuff[dirLen + (local_i - 1)] != '.') {
+						dirBuff[dirLen + local_i++] = '.';
+					}
+
+					if (dirBuff[dirLen + (local_i - 1)] != '*') {
+						dirBuff[dirLen + local_i++] = '*';
+					}
+
+					dirBuff[dirLen + local_i] = '\0';
+				}
+
+				{ // check if dir has children, if it does, recursivley delete
+					WIN32_FIND_DATAA ffd;
+					HANDLE currentFile = FindFirstFileA(dirBuff, &ffd);
+					dirBuff[dirLen + pathLen] = '\0'; // Remove \*.* from end of path
+					BOOL nextfileFound = FindNextFileA(currentFile, &ffd); // .
+					nextfileFound = FindNextFileA(currentFile, &ffd); // ..
+					while (nextfileFound) {
+						bool isDirectory = ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY;
+						RecursiveDelete(ffd.cFileName, dirBuff, dirLen + pathLen);
+						nextfileFound = FindNextFileA(currentFile, &ffd);
+					}
+					FindClose(currentFile);
+				}
+
+				if (!RemoveDirectoryA(dirBuff)) {
+					Log("Error, could not delete directory");
+				}
+			}
+			else if (isFile) {
+				if (!DeleteFileA(dirBuff)) {
+					Log("Error, could not delete file");
+				}
+			}
+			else {
+				Log("Error, expected dir or file");
+			}
+			dirBuff[dirLen] = '\0';
+		}
 	}
+}
+
+void FileSystem::GetWorkingDir(char* outBuffer, u32 buffLen) {
+	GetCurrentDirectoryA(buffLen, outBuffer);
 }
 
 void FileSystem::Log(const char* buf) {
@@ -178,7 +336,19 @@ void FileSystem::Delete(const char* path, fpPathCallback onSuccess, fpErrorCallb
 		}
 	}
 	else if (ftyp & FILE_ATTRIBUTE_DIRECTORY) {
-		if (RemoveDirectoryA(path)) {
+		char tmpName[CUSTOM_PATH_LEN]; // TODO: Could be a dynamic buffer
+		GetCurrentDirectoryA(CUSTOM_PATH_LEN, tmpName);
+		u32 len = 0;
+		for (char* t = tmpName; *t != '\0'; t++, len++);
+		if (tmpName[len - 1] != '\\') {
+			tmpName[len++] = '\\';
+			tmpName[len] = '\0';
+		}
+
+		Internal::RecursiveDelete(path, tmpName, len);
+
+		DWORD ftyp = GetFileAttributesA(path);
+		if (ftyp == INVALID_FILE_ATTRIBUTES) {
 			if (onSuccess) {
 				onSuccess(path);
 			}
@@ -198,103 +368,6 @@ void FileSystem::Delete(const char* path, fpPathCallback onSuccess, fpErrorCallb
 		else {
 			if (onError) {
 				onError("FileSystem::Delete Can't delete file");
-			}
-		}
-	}
-}
-
-namespace FileSystem {
-	namespace Internal { // TODO: Move to top
-		void Traverse(const char* path, bool expectedToBefile, char* dirBuff, u32 dirLen, bool pre, u32 depth, fpDepthFirstIterateCallback onIterate) {
-			u32 pathLen = 0;
-			u32 local_i = 0;
-			{ // Copy path to tmpPath
-				for (local_i = 0; local_i < MAX_PATH; ++local_i) {
-					dirBuff[local_i + dirLen] = path[local_i];
-					if (path[local_i] == '\0') {
-						break;
-					}
-				}
-
-				if (!expectedToBefile) {
-					if (dirBuff[(local_i - 1) + dirLen] != '\\') {
-						dirBuff[dirLen + local_i++] = '\\';
-					}
-				}
-
-				pathLen = local_i;
-				dirBuff[dirLen + pathLen] = '\0';
-			}
-
-			bool isDir = false;
-			bool isFile = false;
-			Internal::GetInfo(dirBuff, &isDir, &isFile);
-
-			if (!isDir && !isFile) {
-				Log("Error traversing directory, non existant object?\n");
-				return;
-			}
-			else if (isDir && isFile) {
-				Log("Error traversing directory, both a directory and file?\n");
-				return;
-			}
-
-			if (expectedToBefile && !isFile) {
-				Log("Error expecting file to be object, but it wasn't\n");
-				return;
-			}
-			else if (!expectedToBefile && !isDir) {
-				Log("Error expecting folder to be object, but it wasn't\n");
-				return;
-			}
-
-			if (isDir) {
-				if (pre) {
-					if (onIterate) {
-						onIterate(dirBuff, depth, isDir, isFile);
-					}
-				}
-
-				{ // Add \*.*
-					if (dirBuff[dirLen + (local_i - 1)] != '*') {
-						dirBuff[dirLen + local_i++] = '*';
-					}
-
-					if (dirBuff[dirLen + (local_i - 1)] != '.') {
-						dirBuff[dirLen + local_i++] = '.';
-					}
-
-					if (dirBuff[dirLen + (local_i - 1)] != '*') {
-						dirBuff[dirLen + local_i++] = '*';
-					}
-
-					dirBuff[dirLen + local_i] = '\0';
-				}
-
-				WIN32_FIND_DATAA ffd;
-				HANDLE currentFile = FindFirstFileA(dirBuff, &ffd);
-				dirBuff[dirLen + pathLen] = '\0'; // Remove \*.* from end of path
-				BOOL nextfileFound = FindNextFileA(currentFile, &ffd); // .
-				nextfileFound = FindNextFileA(currentFile, &ffd); // ..
-				while (nextfileFound) {
-					bool isDirectory = ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY;
-					Traverse(ffd.cFileName, !isDirectory, dirBuff, dirLen + pathLen, pre, depth + 1, onIterate); // TODO: Maybe wrong
-					nextfileFound = FindNextFileA(currentFile, &ffd);
-				}
-				FindClose(currentFile);
-
-				if (!pre) {
-					if (onIterate) {
-						onIterate(dirBuff, depth, isDir, isFile);
-					}
-				}
-				dirBuff[dirLen] = '\0';
-			}
-			else { // Is file
-				if (onIterate) {
-					onIterate(dirBuff, depth, isDir, isFile);
-				}
-				dirBuff[dirLen] = '\0';
 			}
 		}
 	}
@@ -328,7 +401,7 @@ void FileSystem::PreOrderDepthFirstTraversal(const char* path, fpDepthFirstItera
 		tmpName[len] = '\0';
 	}
 
-	Internal::Traverse(path, false, tmpName, len, true, 0, onIterate);
+	Internal::Traverse(path, tmpName, len, true, 0, onIterate);
 
 	if (onFinished) {
 		onFinished();
@@ -363,28 +436,11 @@ void FileSystem::PostOrderDepthFirstTraversal(const char* path, fpDepthFirstIter
 		tmpName[len] = '\0';
 	}
 
-	Internal::Traverse(path, false, tmpName, len, false, 0, onIterate);
+	Internal::Traverse(path, tmpName, len, false, 0, onIterate);
 
 	if (onFinished) {
 		onFinished();
 	}
-}
-
-FileSystem::WatchToken FileSystem::Watch(const char* path, fpWatchChangedCallback onChange) {
-	FileSystem::WatchToken result;
-	return result;
-}
-
-void FileSystem::Unwatch(WatchToken& token) {
-
-}
-
-void FileSystem::UnwatchAll(const char* path) {
-
-}
-
-bool FileSystem::IsWatching(const char* path) {
-	return false;
 }
 
 void FileSystem::Initialize() {

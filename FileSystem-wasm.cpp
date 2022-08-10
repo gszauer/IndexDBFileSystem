@@ -23,10 +23,6 @@ extern "C" void IndexDBFileSystem_wasmDelete(const char* name_ptr, int name_len,
 extern "C" void IndexDBFileSystem_wasmExists(const char* name_ptr, int name_len, FileSystem::fpExistsCallback success_callback);
 extern "C" void IndexDBFileSystem_wasmPreDepthFirstTraversal(const char* name_ptr, int name_len, FileSystem::fpDepthFirstIterateCallback iterate_callback, FileSystem::fpDepthFirstFinishedCallback done_callback);
 extern "C" void IndexDBFileSystem_wasmPostDepthFirstTraversal(const char* name_ptr, int name_len, FileSystem::fpDepthFirstIterateCallback iterate_callback, FileSystem::fpDepthFirstFinishedCallback done_callback);
-extern "C" int  IndexDBFileSystem_wasmWatch(const char* name_ptr, int name_len, FileSystem::fpWatchChangedCallback onchanged);
-extern "C" void IndexDBFileSystem_wasmUnwatch(int unwatchTokenId);
-extern "C" void IndexDBFileSystem_wasmUnwatchAll(const char* name_ptr, int name_len);
-extern "C" int IndexDBFileSystem_wasmIsWatching(const char* name_ptr, int name_len);
 
 extern unsigned char __heap_base;
 
@@ -74,12 +70,6 @@ export void IndexDBFileSystem_wasmTriggerDepthFirstFinishedCallback(FileSystem::
         callback();
     }
 }
-
-export void IndexDBFileSystem_wasmTriggerWatchChangedCallback(FileSystem::fpWatchChangedCallback callback, const char* path, bool isDirectory, bool isFile) {
-    if (callback) {
-        callback(path, isDirectory, isFile);
-    }
- }
 
 export void* IndexDBFileSystem_wasmGetHeapPtr() {
     void* memory = &__heap_base;
@@ -132,25 +122,13 @@ void FileSystem::PostOrderDepthFirstTraversal(const char* path, FileSystem::fpDe
     IndexDBFileSystem_wasmPostDepthFirstTraversal(path, nameLen, onIterate, onFinished); // TODO: Fix
 }
 
-FileSystem::WatchToken FileSystem::Watch(const char* path, FileSystem::fpWatchChangedCallback onChange) {
-    int nameLen = IndexDBFileSystem_strlen(path);
-    FileSystem::WatchToken token;
-    token.wasmId = IndexDBFileSystem_wasmWatch(path, nameLen, onChange);
-    return token;
-}
-
-void FileSystem::Unwatch(FileSystem::WatchToken& token) {
-    IndexDBFileSystem_wasmUnwatch(token.wasmId);
-}
-
-void FileSystem::UnwatchAll(const char* path) {
-    int nameLen = IndexDBFileSystem_strlen(path);
-    IndexDBFileSystem_wasmUnwatchAll(path, nameLen);
-}
-
-bool FileSystem::IsWatching(const char* path) {
-    int nameLen = IndexDBFileSystem_strlen(path);
-    return (bool)IndexDBFileSystem_wasmIsWatching(path, nameLen);
+void FileSystem::GetWorkingDir(char* outBuffer, u32 buffLen) {
+    if (buffLen >= 1) {
+        outBuffer[0] = '/';
+    }
+    if (buffLen >= 2) {
+        outBuffer[1] = '\0';
+    }
 }
 
 void FileSystem::Initialize() {

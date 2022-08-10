@@ -9,10 +9,6 @@
 #undef CreateFile
 
 namespace FileSystem {
-    struct WatchToken {
-        int wasmId;
-    };
-
     typedef void (*fpErrorCallback)(const char* error);
     typedef void (*fpPathCallback)(const char* path);
 
@@ -40,13 +36,7 @@ namespace FileSystem {
 
     // TODO: Win32 style GetFirstChild function for iterating a directory
 
-    typedef void (*fpWatchChangedCallback)(const char* path, bool isDirectory, bool isFile);
-    WatchToken Watch(const char* path, fpWatchChangedCallback onChange);
-
-    void Unwatch(WatchToken& token);
-    void UnwatchAll(const char* path);
-
-    bool IsWatching(const char* path);
+    void GetWorkingDir(char* outBuffer, u32 buffLen);
 
     void Initialize();
     void Shutdown();

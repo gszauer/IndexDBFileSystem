@@ -178,6 +178,7 @@ int run() {
             printf("Done iterating\n");
         });
 
+    FileSystem::Delete("A", 0, 0);
 
     return 0;
 }
